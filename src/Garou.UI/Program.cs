@@ -1,7 +1,7 @@
 using Avalonia;
 using Avalonia.Rendering.Composition;
 using Garou.Composition;
-using Garou.Infrastructure.Persistence.Migrations;
+using Garou.Infrastructure.Persistence;
 using Garou.Infrastructure.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -20,8 +20,8 @@ namespace Garou
         public static void Main(string[] args)
         {
             var services = ServiceRegistration.Build();
-            services.GetRequiredService<MigrationRunner>()
-                .ApplyAsync(CancellationToken.None)
+            services.GetRequiredService<DatabaseInitializer>()
+                .InitializeAsync(CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
             var settingsStore = services.GetRequiredService<SettingsStore>();

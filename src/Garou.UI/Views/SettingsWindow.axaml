@@ -1,0 +1,94 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Garou.ViewModels"
+        x:Class="Garou.Views.SettingsWindow"
+        x:DataType="vm:MainViewModel"
+        Width="560" Height="660" MinWidth="480" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        Title="{Binding Settings.SettingsTitle}">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="24" RowSpacing="16">
+        <StackPanel Grid.Row="0" Spacing="12">
+            <TextBlock Text="{Binding Settings.SettingsTitle}" FontSize="22" FontWeight="SemiBold" />
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16" VerticalAlignment="Center">
+                <TextBlock Grid.Column="0" Text="{Binding Settings.LanguageLabel}" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding Settings.SupportedLanguages}"
+                          SelectedItem="{Binding Settings.SelectedLanguage, Mode=TwoWay}" />
+            </Grid>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="14">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{Binding Settings.ApplicationPathDescription}" TextWrapping="Wrap" Opacity="0.75" />
+                    <TextBlock Text="{Binding Settings.ImageMediaTypeLabel}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Settings.ImageViewerApplicationPathLabel}" />
+                    <TextBox Text="{Binding Settings.ImageViewerApplicationPath, Mode=TwoWay}" />
+                    <TextBlock Text="{Binding Settings.ImageEditorApplicationPathLabel}" />
+                    <TextBox Text="{Binding Settings.ImageEditorApplicationPath, Mode=TwoWay}" />
+                    <TextBlock Text="{Binding Settings.VideoMediaTypeLabel}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Settings.VideoViewerApplicationPathLabel}" />
+                    <TextBox Text="{Binding Settings.VideoViewerApplicationPath, Mode=TwoWay}" />
+                    <TextBlock Text="{Binding Settings.VideoEditorApplicationPathLabel}" />
+                    <TextBox Text="{Binding Settings.VideoEditorApplicationPath, Mode=TwoWay}" />
+                    <TextBlock Text="{Binding Settings.AudioMediaTypeLabel}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Settings.AudioViewerApplicationPathLabel}" />
+                    <TextBox Text="{Binding Settings.AudioViewerApplicationPath, Mode=TwoWay}" />
+                    <TextBlock Text="{Binding Settings.AudioEditorApplicationPathLabel}" />
+                    <TextBox Text="{Binding Settings.AudioEditorApplicationPath, Mode=TwoWay}" />
+                </StackPanel>
+                <Separator Margin="0,4" />
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Settings.ExtensionsLabel}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Settings.ExtensionsDescription}" TextWrapping="Wrap" Opacity="0.75" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding Settings.ExtensionGroups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ExtensionPreferenceGroupViewModel">
+                            <StackPanel Spacing="6" Margin="0,0,0,8">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                <ItemsControl ItemsSource="{Binding Extensions}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ExtensionPreferenceViewModel">
+                                            <CheckBox Content="{Binding Extension}"
+                                                      IsChecked="{Binding IsIncluded, Mode=TwoWay}"
+                                                      Margin="0,2,12,2" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Separator Margin="0,4" />
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{Binding Settings.CacheLimitLabel}" FontWeight="SemiBold" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" VerticalAlignment="Center">
+                        <Slider Grid.Column="0" Minimum="1" Maximum="1023" TickFrequency="1"
+                                IsSnapToTickEnabled="True" Value="{Binding Settings.CacheLimitMegabytes, Mode=TwoWay}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Settings.CacheLimitValue}" MinWidth="72"
+                                   VerticalAlignment="Center" HorizontalAlignment="Right" />
+                    </Grid>
+                    <CheckBox Content="{Binding Settings.ScanSubfoldersLabel}"
+                              IsChecked="{Binding Settings.ScanSubfolders, Mode=TwoWay}" />
+                    <TextBlock Text="{Binding Settings.ScanSubfoldersDescription}" TextWrapping="Wrap" Opacity="0.75" />
+                    <CheckBox Content="{Binding Settings.SubfoldersLabel}"
+                              IsChecked="{Binding IncludeDescendants, Mode=TwoWay}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" VerticalAlignment="Center">
+            <TextBlock Grid.Column="0" Text="{Binding Settings.StatusText}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" Opacity="0.8" />
+            <Button Grid.Column="1" Content="{Binding Settings.SaveLabel}"
+                    Command="{Binding Settings.SaveSettingsCommand}" />
+            <Button Grid.Column="2" Content="{Binding Settings.CloseLabel}" Click="OnCloseClick" />
+        </Grid>
+    </Grid>
+</Window>

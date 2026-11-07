@@ -11,7 +11,7 @@ public sealed class LibraryRepository(SqliteConnectionFactory connectionFactory)
             "SELECT Id, RootPath, IsEnabled FROM Library ORDER BY Id;",
             reader => new LibraryDefinition
             {
-                Id = reader.GetString(0),
+                Id = Guid.Parse(reader.GetString(0)),
                 RootPath = reader.GetString(1),
                 IsEnabled = reader.GetInt32(2) != 0
             },
@@ -24,18 +24,18 @@ public sealed class LibraryRepository(SqliteConnectionFactory connectionFactory)
         await connectionFactory.ExecuteNonQueryAsync(
             "INSERT INTO Library (Id, RootPath, IsEnabled) VALUES ($id, $rootPath, $isEnabled);",
             cancellationToken,
-            ("$id", library.Id),
+            ("$id", library.Id.ToString("N")),
             ("$rootPath", library.RootPath),
             ("$isEnabled", library.IsEnabled ? 1 : 0));
     }
 
-    public async Task RemoveAsync(string id, CancellationToken cancellationToken) =>
-        await connectionFactory.ExecuteNonQueryAsync("DELETE FROM Library WHERE Id = $id;", cancellationToken, ("$id", id));
+    public async Task RemoveAsync(Guid id, CancellationToken cancellationToken) =>
+        await connectionFactory.ExecuteNonQueryAsync("DELETE FROM Library WHERE Id = $id;", cancellationToken, ("$id", id.ToString("N")));
 
-    public async Task SetEnabledAsync(string id, bool isEnabled, CancellationToken cancellationToken) =>
+    public async Task SetEnabledAsync(Guid id, bool isEnabled, CancellationToken cancellationToken) =>
         await connectionFactory.ExecuteNonQueryAsync(
             "UPDATE Library SET IsEnabled = $isEnabled WHERE Id = $id;",
             cancellationToken,
-            ("$id", id),
+            ("$id", id.ToString("N")),
             ("$isEnabled", isEnabled ? 1 : 0));
 }

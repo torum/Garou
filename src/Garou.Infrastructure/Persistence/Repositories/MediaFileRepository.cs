@@ -11,20 +11,19 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
 {
     private const string SelectColumns =
         """
-        Id, Path, FileName, Extension, MediaType, FileSize, MimeType, Width, Height,
-        DurationSeconds, HashValue, ThumbnailPath, CreatedDateUtc, ModifiedDateUtc,
-        LastIndexedUtc, FolderId
+        Id, Path, FileName, Extension, MediaType, FileSize, HashValue, ThumbnailPath,
+        CreatedDateUtc, ModifiedDateUtc, LastIndexedUtc, FolderId
         """;
 
-    public async Task<MediaFile?> GetByIdAsync(long id, CancellationToken cancellationToken) =>
-        await connectionFactory.QuerySingleAsync($"SELECT {SelectColumns} FROM MediaFile WHERE Id = $value;", Map, cancellationToken, ("$value", id));
+    public async Task<MediaFile?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
+        await connectionFactory.QuerySingleAsync($"SELECT {SelectColumns} FROM MediaFile WHERE Id = $value;", Map, cancellationToken, ("$value", id.ToString("N")));
 
     public async Task<MediaFile?> GetByPathAsync(string path, CancellationToken cancellationToken) =>
         await connectionFactory.QuerySingleAsync($"SELECT {SelectColumns} FROM MediaFile WHERE Path = $value;", Map, cancellationToken, ("$value", path));
 
     public async Task<IReadOnlyList<MediaFile>> GetPageAsync(
-        long? folderId,
-        long afterId,
+        Guid? folderId,
+        Guid afterId,
         int pageSize,
         CancellationToken cancellationToken)
     {
@@ -39,8 +38,8 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
             """,
             Map,
             cancellationToken,
-            ("$afterId", afterId),
-            ("$folderId", folderId),
+            ("$afterId", afterId.ToString("N")),
+            ("$folderId", folderId?.ToString("N")),
             ("$pageSize", pageSize));
     }
 
@@ -81,21 +80,15 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
         command.Transaction = transaction;
         command.CommandText =
             """
-            INSERT INTO MediaFile (Path, FileName, Extension, MediaType, FileSize, MimeType, Width, Height,
-                                   DurationSeconds, HashValue, ThumbnailPath, CreatedDateUtc, ModifiedDateUtc,
-                                   LastIndexedUtc, FolderId)
-            VALUES ($path, $fileName, $extension, $mediaType, $fileSize, $mimeType, $width, $height,
-                    $durationSeconds, $hashValue, $thumbnailPath, $createdDateUtc, $modifiedDateUtc,
-                    $lastIndexedUtc, $folderId)
+            INSERT INTO MediaFile (Id, Path, FileName, Extension, MediaType, FileSize, HashValue,
+                                   ThumbnailPath, CreatedDateUtc, ModifiedDateUtc, LastIndexedUtc, FolderId)
+            VALUES ($id, $path, $fileName, $extension, $mediaType, $fileSize, $hashValue,
+                    $thumbnailPath, $createdDateUtc, $modifiedDateUtc, $lastIndexedUtc, $folderId)
             ON CONFLICT(Path) DO UPDATE SET
                 FileName = excluded.FileName,
                 Extension = excluded.Extension,
                 MediaType = excluded.MediaType,
                 FileSize = excluded.FileSize,
-                MimeType = excluded.MimeType,
-                Width = excluded.Width,
-                Height = excluded.Height,
-                DurationSeconds = excluded.DurationSeconds,
                 HashValue = excluded.HashValue,
                 ThumbnailPath = excluded.ThumbnailPath,
                 CreatedDateUtc = excluded.CreatedDateUtc,
@@ -104,15 +97,12 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
                 FolderId = excluded.FolderId;
             """;
 
+        var id = command.AddValue("$id", null);
         var path = command.AddValue("$path", null);
         var fileName = command.AddValue("$fileName", null);
         var extension = command.AddValue("$extension", null);
         var mediaType = command.AddValue("$mediaType", null);
         var fileSize = command.AddValue("$fileSize", null);
-        var mimeType = command.AddValue("$mimeType", null);
-        var width = command.AddValue("$width", null);
-        var height = command.AddValue("$height", null);
-        var durationSeconds = command.AddValue("$durationSeconds", null);
         var hashValue = command.AddValue("$hashValue", null);
         var thumbnailPath = command.AddValue("$thumbnailPath", null);
         var createdDateUtc = command.AddValue("$createdDateUtc", null);
@@ -125,21 +115,18 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            id.Value = (file.Id == Guid.Empty ? Guid.CreateVersion7() : file.Id).ToString("N");
             path.Value = file.Path;
             fileName.Value = file.FileName;
             extension.Value = file.Extension;
             mediaType.Value = (int)file.MediaType;
             fileSize.Value = file.FileSize ?? (object)DBNull.Value;
-            mimeType.Value = file.MimeType ?? (object)DBNull.Value;
-            width.Value = file.Width ?? (object)DBNull.Value;
-            height.Value = file.Height ?? (object)DBNull.Value;
-            durationSeconds.Value = file.DurationSeconds ?? (object)DBNull.Value;
             hashValue.Value = file.HashValue ?? (object)DBNull.Value;
             thumbnailPath.Value = file.ThumbnailPath ?? (object)DBNull.Value;
             createdDateUtc.Value = file.CreatedDateUtc.ToDbDate() ?? (object)DBNull.Value;
             modifiedDateUtc.Value = file.ModifiedDateUtc.ToDbDate() ?? (object)DBNull.Value;
             lastIndexedUtc.Value = file.LastIndexedUtc.ToDbDate() ?? (object)DBNull.Value;
-            folderId.Value = file.FolderId ?? (object)DBNull.Value;
+            folderId.Value = file.FolderId?.ToString("N") ?? (object)DBNull.Value;
 
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -147,12 +134,12 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task UpdateThumbnailPathAsync(long mediaFileId, string? thumbnailPath, CancellationToken cancellationToken) =>
+    public async Task UpdateThumbnailPathAsync(Guid mediaFileId, string? thumbnailPath, CancellationToken cancellationToken) =>
         await connectionFactory.ExecuteNonQueryAsync(
             "UPDATE MediaFile SET ThumbnailPath = $thumbnailPath WHERE Id = $id;",
             cancellationToken,
             ("$thumbnailPath", thumbnailPath),
-            ("$id", mediaFileId));
+            ("$id", mediaFileId.ToString("N")));
 
     public async Task DeleteByPathAsync(string path, CancellationToken cancellationToken) =>
         await connectionFactory.ExecuteNonQueryAsync("DELETE FROM MediaFile WHERE Path = $path;", cancellationToken, ("$path", path));
@@ -194,22 +181,18 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
     {
         return new MediaFile
         {
-            Id = reader.GetInt64(0),
+            Id = Guid.Parse(reader.GetString(0)),
             Path = reader.GetString(1),
             FileName = reader.GetString(2),
             Extension = reader.GetString(3),
             MediaType = (MediaType)reader.GetInt32(4),
             FileSize = reader.ReadNullable<long>(5),
-            MimeType = reader.ReadNullableString(6),
-            Width = reader.ReadNullable<int>(7),
-            Height = reader.ReadNullable<int>(8),
-            DurationSeconds = reader.ReadNullable<double>(9),
-            HashValue = reader.ReadNullableString(10),
-            ThumbnailPath = reader.ReadNullableString(11),
-            CreatedDateUtc = reader.ReadDate(12),
-            ModifiedDateUtc = reader.ReadDate(13),
-            LastIndexedUtc = reader.ReadDate(14),
-            FolderId = reader.ReadNullable<long>(15)
+            HashValue = reader.ReadNullableString(6),
+            ThumbnailPath = reader.ReadNullableString(7),
+            CreatedDateUtc = reader.ReadDate(8),
+            ModifiedDateUtc = reader.ReadDate(9),
+            LastIndexedUtc = reader.ReadDate(10),
+            FolderId = reader.IsDBNull(11) ? null : Guid.Parse(reader.GetString(11))
         };
     }
 }

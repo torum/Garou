@@ -4,19 +4,19 @@ namespace Garou.Domain.Abstractions;
 
 public interface IMediaFileRepository
 {
-    Task<MediaFile?> GetByIdAsync(long id, CancellationToken cancellationToken);
+    Task<MediaFile?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
 
     Task<MediaFile?> GetByPathAsync(string path, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<MediaFile>> GetPageAsync(
-        long? folderId,
-        long afterId,
+        Guid? folderId,
+        Guid afterId,
         int pageSize,
         CancellationToken cancellationToken);
 
     Task UpsertBatchAsync(IReadOnlyList<MediaFile> mediaFiles, CancellationToken cancellationToken);
 
-    Task UpdateThumbnailPathAsync(long mediaFileId, string? thumbnailPath, CancellationToken cancellationToken);
+    Task UpdateThumbnailPathAsync(Guid mediaFileId, string? thumbnailPath, CancellationToken cancellationToken);
 
     Task DeleteByPathAsync(string path, CancellationToken cancellationToken);
 

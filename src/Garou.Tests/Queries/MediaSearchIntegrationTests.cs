@@ -2,7 +2,6 @@ using Garou.Application.Queries;
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
 using Garou.Infrastructure.Persistence;
-using Garou.Infrastructure.Persistence.Migrations;
 using Garou.Infrastructure.Persistence.Repositories;
 using Microsoft.Data.Sqlite;
 
@@ -67,7 +66,7 @@ public sealed class MediaSearchIntegrationTests : IDisposable
             MediaQueryBuilder.Build(CreateQuery() with { MediaType = MediaTypeFilter.Image | MediaTypeFilter.Audio }),
             CancellationToken.None);
 
-        Assert.Equal(["photo.jpg", "track.mp3"], results.Select(file => file.FileName));
+        Assert.Equal(["photo.jpg", "track.mp3"], results.Select(file => file.FileName).Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -99,7 +98,7 @@ public sealed class MediaSearchIntegrationTests : IDisposable
 
     private async Task<MediaFileRepository> SeedAsync(params MediaFile[] files)
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var repository = new MediaFileRepository(_connectionFactory);
         await repository.UpsertBatchAsync(files, CancellationToken.None);
         return repository;
@@ -118,5 +117,5 @@ public sealed class MediaSearchIntegrationTests : IDisposable
 
     private static MediaQuery CreateQuery() =>
         new(FolderId: null, SearchText: null, MediaType: MediaTypeFilter.Any,
-            SortField: MediaSortField.Id, Descending: false, AfterId: 0, PageSize: 50);
+            SortField: MediaSortField.Id, Descending: false, AfterId: Guid.Empty, PageSize: 50);
 }

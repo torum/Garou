@@ -3,6 +3,7 @@
         xmlns:vm="using:Garou.ViewModels"
         xmlns:vc="using:Garou.Views.Controls"
         xmlns:domain="using:Garou.Domain.Entities"
+        xmlns:metadata="using:Garou.Domain.Models"
         xmlns:queries="using:Garou.Application.Queries"
         xmlns:conv="using:Garou.UI.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -68,10 +69,10 @@
                         <Grid ColumnDefinitions="*" Background="Transparent" ToolTip.Tip="{Binding PathText}">
                             <TextBlock Grid.Column="0" Text="{Binding NameText}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,6,0" />
                             <Grid.ContextMenu>
-                                <ContextMenu DataContext="{Binding}">
-                                    <MenuItem Header="Open folder location" Click="OnOpenFolderLocationClick" />
-                                    <MenuItem Header="Clear thumbnail cache for folder" Click="OnClearFolderThumbnailCacheClick" />
-                                    <MenuItem Header="Remove folder" Click="OnRemoveFolderClick" />
+                                <ContextMenu DataContext="{Binding}" Opened="OnContextMenuOpened">
+                                    <MenuItem Header="Open folder" Tag="OpenFolder" Click="OnOpenFolderLocationClick" />
+                                    <MenuItem Header="Clear folder thumbnail cache" Tag="ClearFolderThumbnailCache" Click="OnClearFolderThumbnailCacheClick" />
+                                    <MenuItem Header="Remove folder from library" Tag="RemoveFolderFromLibrary" Click="OnRemoveFolderClick" />
                                 </ContextMenu>
                             </Grid.ContextMenu>
                         </Grid>
@@ -86,13 +87,72 @@
 
         <SplitView Grid.Row="0" Grid.Column="2" IsPaneOpen="{Binding IsDetailsPaneOpen}" DisplayMode="Inline" PanePlacement="Right" OpenPaneLength="280">
             <SplitView.Pane>
-                <StackPanel Margin="16" Spacing="8" DataContext="{Binding SelectedItem}">
-                    <TextBlock Text="{Binding FileName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding File.Path}" Opacity="0.75" TextWrapping="Wrap" />
-                </StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16" Spacing="8" DataContext="{Binding SelectedItem}" x:DataType="vm:MediaItemViewModel">
+                        <TextBlock Text="{Binding FileName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding File.Path}" Opacity="0.75" TextWrapping="Wrap" />
+                        <Separator Margin="0,8" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="ID" Width="96" Opacity="0.65" />
+                            <TextBlock Text="{Binding IdText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Type" Width="96" Opacity="0.65" />
+                            <TextBlock Text="{Binding MediaTypeText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Extension" Width="96" Opacity="0.65" />
+                            <TextBlock Text="{Binding ExtensionText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Size" Width="96" Opacity="0.65" />
+                            <TextBlock Text="{Binding FileSizeText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Spacing="8" IsVisible="{Binding ShowsDetailedMetadata}">
+                            <Separator Margin="0,8" />
+                            <TextBlock Text="Media metadata" FontWeight="SemiBold" />
+                            <ItemsControl ItemsSource="{Binding DetailedTags}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="metadata:MediaMetadataTag">
+                                        <StackPanel Spacing="2" Margin="0,0,0,6">
+                                            <TextBlock Text="{Binding Category}" FontSize="11" Opacity="0.65" />
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Value}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Hash" Width="96" Opacity="0.65" />
+                            <TextBlock Text="{Binding HashText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Created" Width="96" Opacity="0.65" />
+                            <TextBlock Text="{Binding CreatedDateText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Modified" Width="96" Opacity="0.65" />
+                            <TextBlock Text="{Binding ModifiedDateText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Indexed" Width="96" Opacity="0.65" />
+                            <TextBlock Text="{Binding LastIndexedDateText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Folder ID" Width="96" Opacity="0.65" />
+                            <TextBlock Text="{Binding FolderIdText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Thumbnail" Width="96" Opacity="0.65" />
+                            <TextBlock Text="{Binding ThumbnailPathText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </SplitView.Pane>
             <SplitView.Content>
-                <ListBox x:Name="MediaListBox" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" Margin="0,0,0,0" Padding="0,8,0,0" DoubleTapped="OnMediaDoubleTapped" Theme="{DynamicResource {x:Type ListBox}}"
+                <!-- Keep SelectionChanged wired for generalized on-demand metadata loading -->
+                <ListBox x:Name="MediaListBox" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" SelectionChanged="OnMediaSelectionChanged" Margin="0,0,0,0" Padding="0,8,0,0" DoubleTapped="OnMediaDoubleTapped" Theme="{DynamicResource {x:Type ListBox}}"
                          Classes.hide-names="{Binding !ShowFileNames}"
                          Classes.hide-badges="{Binding !ShowFileTypeBadges}">
                     <ListBox.Styles>
@@ -143,9 +203,13 @@
                         <DataTemplate x:DataType="vm:MediaItemViewModel">
                             <Border Margin="2" Padding="4" CornerRadius="8" Background="Transparent">
                                 <Border.ContextMenu>
-                                    <ContextMenu DataContext="{Binding}">
-                                        <MenuItem Header="Open containing folder location" Click="OnOpenContainingFolderClick" />
-                                        <MenuItem Header="Open cached thumbnail image folder location" Click="OnOpenThumbnailFolderClick" />
+                                    <ContextMenu DataContext="{Binding}" Opened="OnContextMenuOpened">
+                                        <MenuItem Header="Open with default app" Tag="OpenWithDefaultApplication" InputGesture="Enter" Click="OnOpenWithDefaultApplicationClick" />
+                                        <Separator />
+                                        <MenuItem Header="Open with viewer" Tag="viewer" Click="OnLaunchWithViewerClick" />
+                                        <MenuItem Header="Open with editor" Tag="editor" Click="OnLaunchWithEditorClick" />
+                                        <MenuItem Header="Open containing folder" Tag="OpenContainingFolder" Click="OnOpenContainingFolderClick" />
+                                        <MenuItem Header="Open thumbnail cache folder" Tag="OpenThumbnailCacheFolder" Click="OnOpenThumbnailFolderClick" />
                                     </ContextMenu>
                                 </Border.ContextMenu>
                                 <StackPanel Spacing="4">
@@ -296,10 +360,11 @@
                 <Border Grid.Column="2" Margin="4" Padding="8,6" CornerRadius="10" BorderThickness="1" BorderBrush="#22000000" VerticalAlignment="Center">
                     <StackPanel Spacing="5">
                         <TextBlock Text="SCOPE" FontSize="10" FontWeight="Bold" Opacity="0.65" Margin="4,0,0,0" />
-                        <StackPanel Orientation="Horizontal">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
                             <ToggleButton Classes="command-bar-toggle" Margin="2" ToolTip.Tip="Details" IsChecked="{Binding IsDetailsPaneOpen, Mode=TwoWay}">
                                 <Path Width="14" Height="14" Data="{StaticResource PanelRightIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
                             </ToggleButton>
+                            <Button Content="{Binding Settings.SettingsTitle}" Click="OnSettingsClick" VerticalAlignment="Center" />
                         </StackPanel>
                     </StackPanel>
                 </Border>

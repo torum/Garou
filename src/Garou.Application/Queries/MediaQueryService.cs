@@ -3,7 +3,7 @@ using Garou.Domain.Entities;
 
 namespace Garou.Application.Queries;
 
-public sealed record MediaPage(IReadOnlyList<MediaFile> Items, long? NextAfterId);
+public sealed record MediaPage(IReadOnlyList<MediaFile> Items, Guid? NextAfterId);
 
 public sealed record FolderNode(Folder Folder, IReadOnlyList<FolderNode> Children, bool IsRoot)
 {
@@ -41,7 +41,7 @@ public sealed class MediaQueryService(
         return mediaSearch.CountAsync(MediaQueryBuilder.BuildCount(query), cancellationToken);
     }
 
-    public Task<MediaFile?> GetMediaDetailsAsync(long id, CancellationToken cancellationToken)
+    public Task<MediaFile?> GetMediaDetailsAsync(Guid id, CancellationToken cancellationToken)
     {
         return mediaFiles.GetByIdAsync(id, cancellationToken);
     }
@@ -60,7 +60,7 @@ public sealed class MediaQueryService(
             .ToList();
     }
 
-    private static FolderNode BuildNode(Folder folder, IReadOnlyDictionary<long, List<Folder>> childrenByParent, bool isRoot)
+    private static FolderNode BuildNode(Folder folder, IReadOnlyDictionary<Guid, List<Folder>> childrenByParent, bool isRoot)
     {
         var children = childrenByParent.TryGetValue(folder.Id, out var list)
             ? list.Select(child => BuildNode(child, childrenByParent, isRoot: false)).ToList()

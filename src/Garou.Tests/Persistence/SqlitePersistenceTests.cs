@@ -1,7 +1,7 @@
+using Garou.Application.Queries;
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
 using Garou.Infrastructure.Persistence;
-using Garou.Infrastructure.Persistence.Migrations;
 using Garou.Infrastructure.Persistence.Repositories;
 using Microsoft.Data.Sqlite;
 
@@ -27,48 +27,73 @@ public sealed class SqlitePersistenceTests : IDisposable
     }
 
     [Fact]
-    public async Task WhenMigrationsApplyThenSchemaVersionIsTwo()
+    public async Task WhenDatabaseIsInitializedThenCurrentTablesAreCreated()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
 
         await using var connection = await _connectionFactory.OpenAsync(CancellationToken.None);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT MAX(Version) FROM SchemaVersion;";
+        command.CommandText =
+            "SELECT GROUP_CONCAT(name, ',') FROM (SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name);";
 
-        Assert.Equal(2L, await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(
+            "Folder,Library,MediaFile,MediaFileTag,Tag,ThumbnailCacheEntry",
+            await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task WhenMigrationsApplyTwiceThenSchemaVersionHasSingleRow()
+    public async Task WhenDatabaseIsInitializedThenOnlyApprovedMediaFileColumnsAreCreated()
     {
-        var runner = new MigrationRunner(_connectionFactory);
-        await runner.ApplyAsync(CancellationToken.None);
-        await runner.ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
 
         await using var connection = await _connectionFactory.OpenAsync(CancellationToken.None);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM SchemaVersion;";
+        command.CommandText = "SELECT GROUP_CONCAT(name, ',') FROM pragma_table_info('MediaFile');";
 
-        Assert.Equal(2L, await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("Id,Path,FileName,Extension,MediaType,FileSize,HashValue,ThumbnailPath,CreatedDateUtc,ModifiedDateUtc,LastIndexedUtc,FolderId", await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task WhenDatabaseIsInitializedTwiceThenExistingDataIsPreserved()
+    {
+        var initializer = new DatabaseInitializer(_connectionFactory);
+        await initializer.InitializeAsync(CancellationToken.None);
+
+        await using (var connection = await _connectionFactory.OpenAsync(CancellationToken.None))
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "INSERT INTO Library (Id, RootPath) VALUES ($id, 'C:\\Photos');";
+            command.Parameters.AddWithValue("$id", Guid.CreateVersion7().ToString("N"));
+            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        await initializer.InitializeAsync(CancellationToken.None);
+
+        await using var verifyConnection = await _connectionFactory.OpenAsync(CancellationToken.None);
+        await using var verifyCommand = verifyConnection.CreateCommand();
+        verifyCommand.CommandText = "SELECT COUNT(*) FROM Library;";
+
+        Assert.Equal(1L, await verifyCommand.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task WhenFolderAddedThenGetByPathReturnsIt()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var repository = new FolderRepository(_connectionFactory);
 
-        var id = await repository.AddAsync(new Folder { Id = 0, Path = @"C:\Photos" }, CancellationToken.None);
+        var id = await repository.AddAsync(new Folder { Path = @"C:\Photos" }, CancellationToken.None);
         var folder = await repository.GetByPathAsync(@"C:\Photos", CancellationToken.None);
 
         Assert.Equal(id, folder?.Id);
+        Assert.Equal(7, id.Version);
     }
 
     [Fact]
     public async Task WhenFolderSubtreeIsDeletedThenIndexedDataIsRemovedAndSourceFilesRemain()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var sourceDirectory = Path.Combine(Path.GetTempPath(), $"Garou-source-{Guid.NewGuid():N}");
         var childDirectory = Path.Combine(sourceDirectory, "child");
         var unrelatedDirectory = Path.Combine(Path.GetTempPath(), $"Garou-unrelated-{Guid.NewGuid():N}");
@@ -85,9 +110,9 @@ public sealed class SqlitePersistenceTests : IDisposable
         try
         {
             var folders = new FolderRepository(_connectionFactory);
-            var rootId = await folders.AddAsync(new Folder { Id = 0, Path = sourceDirectory }, CancellationToken.None);
-            var childId = await folders.AddAsync(new Folder { Id = 0, Path = childDirectory, ParentId = rootId }, CancellationToken.None);
-            var unrelatedFolderId = await folders.AddAsync(new Folder { Id = 0, Path = unrelatedDirectory }, CancellationToken.None);
+            var rootId = await folders.AddAsync(new Folder { Path = sourceDirectory }, CancellationToken.None);
+            var childId = await folders.AddAsync(new Folder { Path = childDirectory, ParentId = rootId }, CancellationToken.None);
+            var unrelatedFolderId = await folders.AddAsync(new Folder { Path = unrelatedDirectory }, CancellationToken.None);
             var mediaFiles = new MediaFileRepository(_connectionFactory);
             await mediaFiles.UpsertBatchAsync(
                 [
@@ -106,14 +131,15 @@ public sealed class SqlitePersistenceTests : IDisposable
             await using (var connection = await _connectionFactory.OpenAsync(CancellationToken.None))
             await using (var command = connection.CreateCommand())
             {
-                command.CommandText = "INSERT INTO Tag (Name) VALUES ('test'); SELECT last_insert_rowid();";
-                var tagId = (long)(await command.ExecuteScalarAsync(cancellationToken))!;
+                var tagId = Guid.CreateVersion7();
+                command.CommandText = "INSERT INTO Tag (Id, Name) VALUES ($tagId, 'test');";
+                command.Parameters.AddWithValue("$tagId", tagId.ToString("N"));
+                await command.ExecuteNonQueryAsync(cancellationToken);
                 command.CommandText = "INSERT INTO MediaFileTag (MediaFileId, TagId) VALUES ($mediaFileId, $tagId);";
-                var mediaFileId = command.Parameters.AddWithValue("$mediaFileId", 0L);
-                command.Parameters.AddWithValue("$tagId", tagId);
+                var mediaFileId = command.Parameters.AddWithValue("$mediaFileId", string.Empty);
                 foreach (var indexedFile in indexedFiles)
                 {
-                    mediaFileId.Value = indexedFile!.Id;
+                    mediaFileId.Value = indexedFile!.Id.ToString("N");
                     await command.ExecuteNonQueryAsync(cancellationToken);
                 }
             }
@@ -143,7 +169,7 @@ public sealed class SqlitePersistenceTests : IDisposable
     [Fact]
     public async Task WhenMediaFileUpsertedTwiceThenSingleRowIsUpdated()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var repository = new MediaFileRepository(_connectionFactory);
 
         await repository.UpsertBatchAsync([CreateMediaFile("a.jpg", 10)], CancellationToken.None);
@@ -152,12 +178,13 @@ public sealed class SqlitePersistenceTests : IDisposable
         var file = await repository.GetByPathAsync("a.jpg", CancellationToken.None);
 
         Assert.Equal(20L, file?.FileSize);
+        Assert.Equal(7, file!.Id.Version);
     }
 
     [Fact]
     public async Task WhenMediaFileRoundTripsThenDatesArePreserved()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var repository = new MediaFileRepository(_connectionFactory);
         var modified = new DateTime(2024, 5, 6, 7, 8, 9, DateTimeKind.Utc);
 
@@ -170,9 +197,33 @@ public sealed class SqlitePersistenceTests : IDisposable
     }
 
     [Fact]
+    public async Task WhenMediaFileIsStoredThenOnlyApprovedFieldsAreReturned()
+    {
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
+        var repository = new MediaFileRepository(_connectionFactory);
+        var mediaFile = new MediaFile
+        {
+            Path = "metadata.mp4",
+            FileName = "metadata.mp4",
+            Extension = ".mp4",
+            MediaType = MediaType.Video,
+            FileSize = 42,
+            HashValue = "hash-value"
+        };
+
+        await repository.UpsertBatchAsync([mediaFile], CancellationToken.None);
+        var query = MediaQueryBuilder.Build(new MediaQuery(null, null, MediaTypeFilter.Any, MediaSortField.Id, false, Guid.Empty, 10));
+        var result = Assert.Single(await repository.SearchAsync(query, CancellationToken.None));
+
+        Assert.Equal(mediaFile.Id, result.Id);
+        Assert.Equal(mediaFile.FileSize, result.FileSize);
+        Assert.Equal(mediaFile.HashValue, result.HashValue);
+    }
+
+    [Fact]
     public async Task WhenThumbnailPathIsUpdatedThenNewPathIsPersisted()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var repository = new MediaFileRepository(_connectionFactory);
         await repository.UpsertBatchAsync([CreateMediaFile("thumbnail-update.jpg", 1)], CancellationToken.None);
         var media = await repository.GetByPathAsync("thumbnail-update.jpg", CancellationToken.None);
@@ -186,7 +237,7 @@ public sealed class SqlitePersistenceTests : IDisposable
     [Fact]
     public async Task WhenThumbnailPathIsClearedThenNullIsPersisted()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var repository = new MediaFileRepository(_connectionFactory);
         await repository.UpsertBatchAsync([CreateMediaFile("thumbnail-clear.jpg", 1)], CancellationToken.None);
         var media = await repository.GetByPathAsync("thumbnail-clear.jpg", CancellationToken.None);
@@ -200,11 +251,11 @@ public sealed class SqlitePersistenceTests : IDisposable
     [Fact]
     public async Task WhenPagedThenKeysetPagesCoverAllFilesWithoutOverlap()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var repository = new MediaFileRepository(_connectionFactory);
         await repository.UpsertBatchAsync(Enumerable.Range(1, 5).Select(i => CreateMediaFile($"f{i}.jpg", i)).ToList(), CancellationToken.None);
 
-        var first = await repository.GetPageAsync(null, 0, 2, CancellationToken.None);
+        var first = await repository.GetPageAsync(null, Guid.Empty, 2, CancellationToken.None);
         var second = await repository.GetPageAsync(null, first[^1].Id, 2, CancellationToken.None);
         var third = await repository.GetPageAsync(null, second[^1].Id, 2, CancellationToken.None);
 
@@ -214,13 +265,13 @@ public sealed class SqlitePersistenceTests : IDisposable
     [Fact]
     public async Task WhenBatchWriterWritesMoreThanBatchSizeThenAllFilesAreStored()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var repository = new MediaFileRepository(_connectionFactory);
         var files = Enumerable.Range(1, 1201).Select(i => CreateMediaFile($"batch{i}.jpg", i)).ToList();
 
         await new BatchWriter(repository).UpsertMediaFilesAsync(files, CancellationToken.None);
 
-        var page = await repository.GetPageAsync(null, 0, 2000, CancellationToken.None);
+        var page = await repository.GetPageAsync(null, Guid.Empty, 2000, CancellationToken.None);
 
         Assert.Equal(1201, page.Count);
     }
@@ -228,7 +279,7 @@ public sealed class SqlitePersistenceTests : IDisposable
     [Fact]
     public async Task WhenThumbnailEntryUpsertedThenTotalSizeMatches()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var repository = new ThumbnailCacheRepository(_connectionFactory);
 
         await repository.UpsertAsync(new ThumbnailCacheEntry
@@ -241,9 +292,8 @@ public sealed class SqlitePersistenceTests : IDisposable
         Assert.Equal(300L, await repository.GetTotalSizeBytesAsync(CancellationToken.None));
     }
 
-    private static MediaFile CreateMediaFile(string path, long size, DateTime? modifiedDateUtc = null, long? folderId = null) => new()
+    private static MediaFile CreateMediaFile(string path, long size, DateTime? modifiedDateUtc = null, Guid? folderId = null) => new()
     {
-        Id = 0,
         Path = path,
         FileName = path,
         Extension = ".jpg",

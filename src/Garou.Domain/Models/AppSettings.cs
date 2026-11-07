@@ -6,9 +6,11 @@ public sealed class AppSettings
 
     public long ThumbnailCacheLimitBytes { get; set; } = 900L * 1024 * 1024;
 
-    public long? SelectedFolderId { get; set; }
+    public List<string> IncludedExtensions { get; set; } = [.. MediaFileExtensions.All];
 
-    public List<long> ExpandedFolderIds { get; set; } = [];
+    public Guid? SelectedFolderId { get; set; }
+
+    public List<Guid> ExpandedFolderIds { get; set; } = [];
 
     public bool IsDetailsPaneOpen { get; set; } = true;
 
@@ -21,6 +23,20 @@ public sealed class AppSettings
     public bool ShowFileTypeBadges { get; set; } = true;
 
     public bool IncludeDescendants { get; set; } = true;
+
+    public bool ScanSubfolders { get; set; } = true;
+
+    public string ImageViewerApplicationPath { get; set; } = string.Empty;
+
+    public string ImageEditorApplicationPath { get; set; } = string.Empty;
+
+    public string VideoViewerApplicationPath { get; set; } = string.Empty;
+
+    public string VideoEditorApplicationPath { get; set; } = string.Empty;
+
+    public string AudioViewerApplicationPath { get; set; } = string.Empty;
+
+    public string AudioEditorApplicationPath { get; set; } = string.Empty;
 
     public double? WindowWidth { get; set; }
 

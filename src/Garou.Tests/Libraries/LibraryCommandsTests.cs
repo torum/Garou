@@ -2,7 +2,6 @@ using Garou.Application.Libraries;
 using Garou.Domain.Abstractions;
 using Garou.Domain.Models;
 using Garou.Infrastructure.Persistence;
-using Garou.Infrastructure.Persistence.Migrations;
 using Garou.Infrastructure.Persistence.Repositories;
 using Microsoft.Data.Sqlite;
 
@@ -39,33 +38,34 @@ public sealed class LibraryCommandsTests : IDisposable
     [Fact]
     public async Task WhenLibraryIsAddedThenItIsStoredEnabledWithFullPath()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
 
-        await _commands.AddLibraryAsync("photos", "C:\\Photos", CancellationToken.None);
+        var id = await _commands.AddLibraryAsync("C:\\Photos", CancellationToken.None);
 
         var library = Assert.Single(await _repository.GetAllAsync(CancellationToken.None));
-        Assert.Equal("photos", library.Id);
+        Assert.Equal(id, library.Id);
+        Assert.Equal(7, id.Version);
         Assert.Equal(Path.GetFullPath("C:\\Photos"), library.RootPath);
         Assert.True(library.IsEnabled);
     }
 
     [Fact]
-    public async Task WhenLibraryIdIsDuplicatedThenAddIsRejected()
+    public async Task WhenLibraryRootIsDuplicatedThenAddIsRejected()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
-        await _commands.AddLibraryAsync("photos", "C:\\Photos", CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
+        await _commands.AddLibraryAsync("C:\\Photos", CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _commands.AddLibraryAsync("photos", "C:\\Other", CancellationToken.None));
+            _commands.AddLibraryAsync("C:\\Photos", CancellationToken.None));
     }
 
     [Fact]
     public async Task WhenLibraryIsDisabledThenIsEnabledIsFalse()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
-        await _commands.AddLibraryAsync("photos", "C:\\Photos", CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
+        var id = await _commands.AddLibraryAsync("C:\\Photos", CancellationToken.None);
 
-        await _commands.DisableLibraryAsync("photos", CancellationToken.None);
+        await _commands.DisableLibraryAsync(id, CancellationToken.None);
 
         var library = Assert.Single(await _repository.GetAllAsync(CancellationToken.None));
         Assert.False(library.IsEnabled);
@@ -74,10 +74,10 @@ public sealed class LibraryCommandsTests : IDisposable
     [Fact]
     public async Task WhenLibraryIsRemovedThenNoLibrariesRemain()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
-        await _commands.AddLibraryAsync("photos", "C:\\Photos", CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
+        var id = await _commands.AddLibraryAsync("C:\\Photos", CancellationToken.None);
 
-        await _commands.RemoveLibraryAsync("photos", CancellationToken.None);
+        await _commands.RemoveLibraryAsync(id, CancellationToken.None);
 
         Assert.Empty(await _repository.GetAllAsync(CancellationToken.None));
     }
@@ -85,39 +85,39 @@ public sealed class LibraryCommandsTests : IDisposable
     [Fact]
     public async Task WhenLibraryIsRefreshedThenItIsScanned()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
-        await _commands.AddLibraryAsync("photos", "C:\\\\Photos", CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
+        var id = await _commands.AddLibraryAsync("C:\\\\Photos", CancellationToken.None);
         var scanner = new RecordingLibraryScanner();
         var commands = new LibraryCommands(_repository, scanner);
 
-        await commands.RefreshLibraryAsync("photos", null, CancellationToken.None);
+        await commands.RefreshLibraryAsync(id, null, CancellationToken.None);
 
-        Assert.Equal("photos", Assert.Single(scanner.Scanned).Id);
+        Assert.Equal(id, Assert.Single(scanner.Scanned).Id);
     }
 
     [Fact]
     public async Task WhenLibraryIsReindexedThenItIsScannedAndMarkedOnline()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
-        await _commands.AddLibraryAsync("photos", "C:\\\\Photos", CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
+        var id = await _commands.AddLibraryAsync("C:\\\\Photos", CancellationToken.None);
         var scanner = new RecordingLibraryScanner();
         var commands = new LibraryCommands(_repository, scanner);
 
-        await commands.ReindexLibraryAsync("photos", null, CancellationToken.None);
+        await commands.ReindexLibraryAsync(id, null, CancellationToken.None);
 
         var scanned = Assert.Single(scanner.Scanned);
-        Assert.Equal("photos", scanned.Id);
+        Assert.Equal(id, scanned.Id);
         Assert.True(scanned.IsOnline);
     }
 
     [Fact]
     public async Task WhenUnknownLibraryIsRefreshedThenItThrows()
     {
-        await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var commands = new LibraryCommands(_repository, new RecordingLibraryScanner());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            commands.RefreshLibraryAsync("missing", null, CancellationToken.None));
+            commands.RefreshLibraryAsync(Guid.CreateVersion7(), null, CancellationToken.None));
     }
 
     private sealed class RecordingLibraryScanner : ILibraryScanner

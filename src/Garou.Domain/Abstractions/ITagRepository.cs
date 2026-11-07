@@ -6,7 +6,7 @@ public interface ITagRepository
 {
     Task<Tag?> GetByNameAsync(string name, CancellationToken cancellationToken);
 
-    Task<long> AddAsync(Tag tag, CancellationToken cancellationToken);
+    Task<Guid> AddAsync(Tag tag, CancellationToken cancellationToken);
 
     Task AssignAsync(MediaFileTag mediaFileTag, CancellationToken cancellationToken);
 

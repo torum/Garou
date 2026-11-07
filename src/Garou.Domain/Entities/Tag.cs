@@ -2,7 +2,7 @@ namespace Garou.Domain.Entities;
 
 public sealed class Tag
 {
-    public long Id { get; init; }
+    public Guid Id { get; init; } = Guid.CreateVersion7();
 
     public required string Name { get; init; }
 }

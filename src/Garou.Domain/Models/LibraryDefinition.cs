@@ -2,7 +2,7 @@ namespace Garou.Domain.Models;
 
 public sealed class LibraryDefinition
 {
-    public required string Id { get; init; }
+    public Guid Id { get; init; } = Guid.CreateVersion7();
 
     public required string RootPath { get; init; }
 

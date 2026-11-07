@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -18,25 +19,27 @@ public partial class MainViewModel(
     AppSettingsSession settingsSession,
     IThumbnailGeneratorService thumbnailGenerator,
     IMediaFileRepository mediaFiles,
-    IFolderRepository folders) : ObservableObject, IDisposable
+    IFolderRepository folders,
+    IMetadataExtractionService metadataExtraction) : ObservableObject, IDisposable
 {
     private const int PageSize = 200;
     private const int SearchDebounceMilliseconds = 300;
     private const int ThumbnailRegenerationDelayMilliseconds = 300;
     private const double MinThumbnailSize = 80;
     private const double MaxThumbnailSize = 320;
-    private const int SmallThumbnailWidth = 200;
-    private const int LargeThumbnailWidth = 320;
+    private const int SmallThumbnailSize = 200;
+    private const int LargeThumbnailSize = 320;
     private const double LargeThumbnailSizeThreshold = 190;
     private double _renderScaling = 1;
     private const double MinLeftPaneWidth = 180;
     private const double MaxLeftPaneWidth = 500;
-    private long _nextAfterId;
+    private Guid _nextAfterId;
     private bool _hasMoreItems;
     private bool _isLoadingMore;
     private readonly SemaphoreSlim _mediaLoadSemaphore = new(1, 1);
-    private long? _selectedFolderId;
+    private Guid? _selectedFolderId;
     private CancellationTokenSource? _reloadCts;
+    private CancellationTokenSource? _selectedMetadataCts;
     private bool _isInitializing;
     private bool _isGeneratingThumbnails;
     private bool _suppressSelectedFolderReload;
@@ -54,6 +57,9 @@ public partial class MainViewModel(
 
     public void Dispose()
     {
+        _selectedMetadataCts?.Cancel();
+        _selectedMetadataCts?.Dispose();
+
         foreach (var item in Items)
         {
             item.Dispose();
@@ -168,9 +174,9 @@ public partial class MainViewModel(
     {
         ArgumentNullException.ThrowIfNull(folderNode);
 
-        var folderIds = new HashSet<long>();
+        var folderIds = new HashSet<Guid>();
         CollectFolderIds(folderNode, folderIds);
-        var afterId = 0L;
+        var afterId = Guid.Empty;
         var removedMediaCount = 0;
 
         try
@@ -236,7 +242,7 @@ public partial class MainViewModel(
         }
     }
 
-    private static void CollectFolderIds(FolderNode node, HashSet<long> folderIds)
+    private static void CollectFolderIds(FolderNode node, HashSet<Guid> folderIds)
     {
         folderIds.Add(node.Folder.Id);
         foreach (var child in node.Children)
@@ -302,6 +308,86 @@ public partial class MainViewModel(
     [ObservableProperty]
     public partial MediaItemViewModel? SelectedItem { get; set; }
 
+    public async Task LoadSelectedMetadataAsync()
+    {
+        _selectedMetadataCts?.Cancel();
+        _selectedMetadataCts?.Dispose();
+        _selectedMetadataCts = null;
+
+        var selectedItem = SelectedItem;
+        if (selectedItem is null || selectedItem.MediaType == Garou.Domain.Enums.MediaType.Unknown)
+        {
+            selectedItem?.SetDetailedTags([]);
+            return;
+        }
+
+        selectedItem.SetDetailedTags([]);
+        var cancellation = new CancellationTokenSource();
+        _selectedMetadataCts = cancellation;
+
+        try
+        {
+            var metadata = await metadataExtraction.ExtractAsync(selectedItem.File.Path, cancellation.Token);
+            if (!cancellation.IsCancellationRequested && ReferenceEquals(SelectedItem, selectedItem))
+            {
+                selectedItem.SetDetailedTags(GetMetadataTags(metadata));
+            }
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MainViewModel] Metadata extraction failed for '{selectedItem.File.Path}': {ex.Message}");
+        }
+        finally
+        {
+            if (ReferenceEquals(_selectedMetadataCts, cancellation))
+            {
+                _selectedMetadataCts.Dispose();
+                _selectedMetadataCts = null;
+            }
+        }
+    }
+
+    private static IReadOnlyList<MediaMetadataTag> GetMetadataTags(MediaMetadata metadata)
+    {
+        var tags = metadata.Tags.ToList();
+        AddMetadataTag(tags, "Dimensions", metadata.Width is { } width && metadata.Height is { } height ? $"{width} x {height}" : null);
+        AddMetadataTag(tags, "Duration", metadata.DurationSeconds is { } duration ? TimeSpan.FromSeconds(duration).ToString() : null);
+        AddMetadataTag(tags, "Codec", metadata.Codec);
+        AddMetadataTag(tags, "Artist", metadata.Artist);
+        AddMetadataTag(tags, "Album", metadata.Album);
+        AddMetadataTag(tags, "Track", metadata.Track?.ToString(CultureInfo.CurrentCulture));
+        AddMetadataTag(tags, "Camera make", metadata.CameraMake);
+        AddMetadataTag(tags, "Camera model", metadata.CameraModel);
+        AddMetadataTag(tags, "Latitude", metadata.Latitude?.ToString("F6", CultureInfo.CurrentCulture));
+        AddMetadataTag(tags, "Longitude", metadata.Longitude?.ToString("F6", CultureInfo.CurrentCulture));
+        AddMetadataTag(tags, "Date taken", metadata.DateTaken);
+        AddMetadataTag(tags, "ISO", metadata.IsoSpeed);
+        AddMetadataTag(tags, "Aperture", metadata.Aperture);
+        AddMetadataTag(tags, "Shutter speed", metadata.ShutterSpeed);
+        AddMetadataTag(tags, "Exposure compensation", metadata.ExposureCompensation);
+        AddMetadataTag(tags, "Focal length", metadata.FocalLength);
+        AddMetadataTag(tags, "35 mm equivalent", metadata.FocalLength35mm);
+        AddMetadataTag(tags, "Flash", metadata.Flash);
+        AddMetadataTag(tags, "Exposure program", metadata.ExposureProgram);
+        AddMetadataTag(tags, "Metering mode", metadata.MeteringMode);
+        AddMetadataTag(tags, "White balance", metadata.WhiteBalance);
+        AddMetadataTag(tags, "Lens make", metadata.LensMake);
+        AddMetadataTag(tags, "Lens model", metadata.LensModel);
+        AddMetadataTag(tags, "Digital zoom", metadata.DigitalZoom);
+        return tags;
+    }
+
+    private static void AddMetadataTag(ICollection<MediaMetadataTag> tags, string name, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            tags.Add(new MediaMetadataTag("Media", name, value));
+        }
+    }
+
     [ObservableProperty]
     public partial string StatusText { get; set; } = string.Empty;
 
@@ -322,13 +408,13 @@ public partial class MainViewModel(
 
     public event Action<FolderNode?>? FolderRestored;
 
-    public HashSet<long> ExpandedFolderIds { get; } = [];
+    public HashSet<Guid> ExpandedFolderIds { get; } = [];
 
     public async Task ClearFolderThumbnailCacheAsync(FolderNode folderNode, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(folderNode);
 
-        var afterId = 0L;
+        var afterId = Guid.Empty;
         var clearedCount = 0;
         var failedFileCount = 0;
         string? cleanupError = null;
@@ -380,6 +466,7 @@ public partial class MainViewModel(
                 ? $"Cleared {clearedCount} thumbnail(s) for {folderNode.PathText}"
                 : $"Cleared {clearedCount} thumbnail(s) for {folderNode.PathText}; could not delete files for {failedFileCount} item(s): {cleanupError}";
             Log(StatusText);
+            RequestVisibleThumbnailRegeneration();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -388,7 +475,7 @@ public partial class MainViewModel(
         }
     }
 
-    private void SetLoadedThumbnail(long mediaFileId, string? thumbnailPath)
+    private void SetLoadedThumbnail(Guid mediaFileId, string? thumbnailPath)
     {
         var index = IndexOfLoadedItem(mediaFileId);
         if (index < 0)
@@ -401,13 +488,13 @@ public partial class MainViewModel(
         Items[index] = updatedItem;
         if (SelectedItem?.File.Id == mediaFileId)
         {
-            SelectedItem = updatedItem;
+            this.SelectedItem = updatedItem;
         }
 
         previousItem.Dispose();
     }
 
-    private int IndexOfLoadedItem(long mediaFileId)
+    private int IndexOfLoadedItem(Guid mediaFileId)
     {
         for (var index = 0; index < Items.Count; index++)
         {
@@ -537,15 +624,15 @@ public partial class MainViewModel(
             while (true)
             {
                 IReadOnlyList<MediaFile> visibleFiles;
-                int thumbnailWidth;
+                int thumbnailSize;
                 lock (_thumbnailRegenerationLock)
                 {
                     observedVersion = _visibleThumbnailVersion;
                     visibleFiles = _visibleThumbnailFiles;
-                    var baseThumbnailWidth = ThumbnailSize <= LargeThumbnailSizeThreshold
-                        ? SmallThumbnailWidth
-                        : LargeThumbnailWidth;
-                    thumbnailWidth = (int)Math.Round(baseThumbnailWidth * _renderScaling);
+                    var baseThumbnailSize = ThumbnailSize <= LargeThumbnailSizeThreshold
+                        ? SmallThumbnailSize
+                        : LargeThumbnailSize;
+                    thumbnailSize = (int)Math.Round(baseThumbnailSize * _renderScaling);
                 }
 
                 await Task.Delay(ThumbnailRegenerationDelayMilliseconds);
@@ -557,7 +644,7 @@ public partial class MainViewModel(
                 var staleFiles = visibleFiles
                     .Where(file => file.ThumbnailPath is null ||
                         !File.Exists(file.ThumbnailPath) ||
-                        !file.ThumbnailPath.EndsWith($"{thumbnailWidth}.jpg", StringComparison.OrdinalIgnoreCase))
+                        !file.ThumbnailPath.EndsWith($"{thumbnailSize}.jpg", StringComparison.OrdinalIgnoreCase))
                     .ToArray();
 
                 if (staleFiles.Length == 0)
@@ -574,7 +661,7 @@ public partial class MainViewModel(
                 await GenerateThumbnailsAsync(
                     staleFiles,
                     "Generating",
-                    (file, _) => thumbnailGenerator.GenerateAsync(file, thumbnailWidth, CancellationToken.None),
+                    (file, _) => thumbnailGenerator.GenerateAsync(file, thumbnailSize, CancellationToken.None),
                     CancellationToken.None,
                     () => IsVisibleThumbnailVersionCurrent(observedVersion));
 
@@ -623,15 +710,15 @@ public partial class MainViewModel(
             while (true)
             {
                 IReadOnlyList<MediaFile> visibleFiles;
-                int thumbnailWidth;
+                int thumbnailSize;
                 lock (_thumbnailRegenerationLock)
                 {
                     observedVersion = _visibleThumbnailVersion;
                     visibleFiles = _visibleThumbnailFiles;
-                    var baseThumbnailWidth = ThumbnailSize <= LargeThumbnailSizeThreshold
-                        ? SmallThumbnailWidth
-                        : LargeThumbnailWidth;
-                    thumbnailWidth = (int)Math.Round(baseThumbnailWidth * _renderScaling);
+                    var baseThumbnailSize = ThumbnailSize <= LargeThumbnailSizeThreshold
+                        ? SmallThumbnailSize
+                        : LargeThumbnailSize;
+                    thumbnailSize = (int)Math.Round(baseThumbnailSize * _renderScaling);
                 }
 
                 // Debounce: waiting here is not "generating", so the flag stays false.
@@ -641,7 +728,7 @@ public partial class MainViewModel(
                     continue;
                 }
 
-                var suffix = $"{thumbnailWidth}.jpg";
+                var suffix = $"{thumbnailSize}.jpg";
                 var staleFiles = new List<MediaFile>(visibleFiles.Count);
                 foreach (var file in visibleFiles)
                 {
@@ -672,7 +759,7 @@ public partial class MainViewModel(
                     await GenerateThumbnailsAsync(
                         staleFiles,
                         "Generating",
-                        (file, _) => thumbnailGenerator.GenerateAsync(file, thumbnailWidth, CancellationToken.None),
+                        (file, _) => thumbnailGenerator.GenerateAsync(file, thumbnailSize, CancellationToken.None),
                         CancellationToken.None,
                         () => IsVisibleThumbnailVersionCurrent(observedVersion));
                 }
@@ -777,7 +864,7 @@ public partial class MainViewModel(
         Log($"Folder tree loaded: roots={FolderTree.Count}");
     }
 
-    private static FolderNode? FindFolderNode(IEnumerable<FolderNode> nodes, long folderId)
+    private static FolderNode? FindFolderNode(IEnumerable<FolderNode> nodes, Guid folderId)
     {
         foreach (var node in nodes)
         {
@@ -809,11 +896,11 @@ public partial class MainViewModel(
 
     public async Task AddFolderAsync(string path, CancellationToken cancellationToken)
     {
-        var id = Guid.NewGuid().ToString("N");
+        Guid id;
         var progress = new Progress<ScanProgress>(ReportScanProgress);
         try
         {
-            await libraryCommands.AddLibraryAsync(id, path, cancellationToken);
+            id = await libraryCommands.AddLibraryAsync(path, cancellationToken);
         }
         catch (InvalidOperationException)
         {
@@ -947,7 +1034,7 @@ public partial class MainViewModel(
         }
     }
 
-    public void SetFolderExpanded(long folderId, bool isExpanded)
+    public void SetFolderExpanded(Guid folderId, bool isExpanded)
     {
         var changed = isExpanded ? ExpandedFolderIds.Add(folderId) : ExpandedFolderIds.Remove(folderId);
         if (changed)
@@ -975,7 +1062,7 @@ public partial class MainViewModel(
         appSettings.LeftPaneWidth = Math.Clamp(LeftPaneWidth, MinLeftPaneWidth, MaxLeftPaneWidth);
     }
 
-    private async Task ReloadAsync(long? folderId, CancellationToken cancellationToken)
+    private async Task ReloadAsync(Guid? folderId, CancellationToken cancellationToken)
     {
         await _mediaLoadSemaphore.WaitAsync(cancellationToken);
         try
@@ -988,7 +1075,7 @@ public partial class MainViewModel(
             }
 
             _items.ReplaceAll([]);
-            _nextAfterId = 0;
+            _nextAfterId = Guid.Empty;
             _hasMoreItems = false;
             LoadMoreCommand.NotifyCanExecuteChanged();
             if (folderId is null)
@@ -1009,7 +1096,7 @@ public partial class MainViewModel(
             _hasMoreItems = shouldPaginate && hasMore;
             LoadMoreCommand.NotifyCanExecuteChanged();
 
-            var fileCount = await queries.CountAsync(CreateQuery(folderId, afterId: 0), cancellationToken);
+            var fileCount = await queries.CountAsync(CreateQuery(folderId, afterId: Guid.Empty), cancellationToken);
             var folderCount = CountFolders(folderId);
             StatusText = $"{fileCount} files, {folderCount} folders";
         }
@@ -1020,7 +1107,7 @@ public partial class MainViewModel(
         }
     }
 
-    private int CountFolders(long? folderId)
+    private int CountFolders(Guid? folderId)
     {
         if (folderId is null)
         {
@@ -1039,7 +1126,7 @@ public partial class MainViewModel(
     private static int CountDescendantFolders(IEnumerable<FolderNode> nodes) =>
         nodes.Sum(node => 1 + CountDescendantFolders(node.Children));
 
-    private MediaQuery CreateQuery(long? folderId, long afterId) => new(
+    private MediaQuery CreateQuery(Guid? folderId, Guid afterId) => new(
         FolderId: folderId,
         SearchText: string.IsNullOrWhiteSpace(SearchText) ? null : SearchText,
         MediaType: SelectedMediaTypeFilter,
@@ -1049,7 +1136,7 @@ public partial class MainViewModel(
         PageSize: PageSize,
         IncludeDescendants: IncludeDescendants);
 
-    private async Task<bool> LoadNextPageAsync(long? folderId, CancellationToken cancellationToken)
+    private async Task<bool> LoadNextPageAsync(Guid? folderId, CancellationToken cancellationToken)
     {
         var page = await queries.SearchPageAsync(CreateQuery(folderId, _nextAfterId), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();

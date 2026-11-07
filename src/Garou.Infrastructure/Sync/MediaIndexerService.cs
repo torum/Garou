@@ -3,34 +3,20 @@ using Garou.Domain.Abstractions;
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
 using Garou.Domain.Models;
+using Garou.Infrastructure.Settings;
 
 namespace Garou.Infrastructure.Sync;
 
 public sealed class MediaIndexerService(
     IFileWatcherService watcher,
     ILibraryRepository libraries,
-    IMetadataExtractionService metadataExtraction,
     IMediaFileRepository mediaFiles,
     IFolderRepository folders,
+    AppSettingsSession settingsSession,
     TimeProvider timeProvider) : ILibraryScanner
 {
     private const int BatchSize = 200;
     private static readonly TimeSpan OfflineRetryInterval = TimeSpan.FromSeconds(30);
-
-    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".heic"
-    };
-
-    private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".mp4", ".mkv", ".mov", ".avi", ".wmv", ".webm", ".m4v", ".mpg", ".mpeg"
-    };
-
-    private static readonly HashSet<string> AudioExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".mp3", ".m4a", ".aac", ".flac", ".wav", ".wma", ".ogg", ".opus", ".aif", ".aiff"
-    };
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -71,13 +57,14 @@ public sealed class MediaIndexerService(
 
         library.IsOnline = true;
         progress?.Report(new ScanProgress("Enumerating files", 0, 0));
-        var files = Directory.EnumerateFiles(library.RootPath, "*", SearchOption.AllDirectories)
+        var searchOption = settingsSession.Current.ScanSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        var files = Directory.EnumerateFiles(library.RootPath, "*", searchOption)
             .Where(path => IsSupported(Path.GetExtension(path)))
             .ToList();
 
         var known = await mediaFiles.GetSignaturesUnderRootAsync(library.RootPath, cancellationToken).ConfigureAwait(false);
 
-        var folderIds = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        var folderIds = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         await EnsureFolderAsync(library.RootPath, library.RootPath, folderIds, cancellationToken).ConfigureAwait(false);
         foreach (var directory in files.Select(Path.GetDirectoryName).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -211,14 +198,13 @@ public sealed class MediaIndexerService(
         }
     }
 
-    internal async Task<MediaFile?> BuildMediaFileAsync(string path, long? folderId, CancellationToken cancellationToken)
+    internal async Task<MediaFile?> BuildMediaFileAsync(string path, Guid? folderId, CancellationToken cancellationToken)
     {
         if (!File.Exists(path))
         {
             return null;
         }
 
-        var metadata = await metadataExtraction.ExtractAsync(path, cancellationToken).ConfigureAwait(false);
         var info = new FileInfo(path);
         var draft = new MediaFile
         {
@@ -227,9 +213,6 @@ public sealed class MediaIndexerService(
             Extension = info.Extension,
             MediaType = ResolveMediaType(info.Extension),
             FileSize = info.Length,
-            Width = metadata.Width,
-            Height = metadata.Height,
-            DurationSeconds = metadata.DurationSeconds,
             CreatedDateUtc = info.CreationTimeUtc,
             ModifiedDateUtc = info.LastWriteTimeUtc,
             LastIndexedUtc = timeProvider.GetUtcNow().UtcDateTime,
@@ -241,9 +224,15 @@ public sealed class MediaIndexerService(
 
     internal async Task IndexFileAsync(string rootPath, string path, CancellationToken cancellationToken)
     {
-        var folderIds = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        if (!IsWithinScanScope(rootPath, path) || !IsSupported(Path.GetExtension(path)))
+        {
+            await mediaFiles.DeleteByPathAsync(path, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var folderIds = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         var directory = Path.GetDirectoryName(path);
-        long? folderId = directory is null
+        Guid? folderId = directory is null
             ? null
             : await EnsureFolderAsync(directory, rootPath, folderIds, cancellationToken).ConfigureAwait(false);
 
@@ -256,7 +245,19 @@ public sealed class MediaIndexerService(
         await mediaFiles.UpsertBatchAsync([mediaFile], cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<long> EnsureFolderAsync(string directory, string rootPath, IDictionary<string, long> folderIds, CancellationToken cancellationToken)
+    private bool IsWithinScanScope(string rootPath, string path)
+    {
+        if (settingsSession.Current.ScanSubfolders)
+        {
+            return true;
+        }
+
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+        var directory = Path.GetDirectoryName(Path.GetFullPath(path));
+        return string.Equals(directory, root, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<Guid> EnsureFolderAsync(string directory, string rootPath, IDictionary<string, Guid> folderIds, CancellationToken cancellationToken)
     {
         if (folderIds.TryGetValue(directory, out var cachedId))
         {
@@ -270,14 +271,14 @@ public sealed class MediaIndexerService(
             return existing.Id;
         }
 
-        long? parentId = null;
+        Guid? parentId = null;
         var isRoot = string.Equals(directory, Path.TrimEndingDirectorySeparator(rootPath), StringComparison.OrdinalIgnoreCase);
         if (!isRoot && Path.GetDirectoryName(directory) is { } parentDirectory)
         {
             parentId = await EnsureFolderAsync(parentDirectory, rootPath, folderIds, cancellationToken).ConfigureAwait(false);
         }
 
-        var id = await folders.AddAsync(new Folder { Id = 0, Path = directory, ParentId = parentId }, cancellationToken).ConfigureAwait(false);
+        var id = await folders.AddAsync(new Folder { Path = directory, ParentId = parentId }, cancellationToken).ConfigureAwait(false);
         folderIds[directory] = id;
         return id;
     }
@@ -294,12 +295,13 @@ public sealed class MediaIndexerService(
             || info.LastWriteTimeUtc != signature.ModifiedDateUtc;
     }
 
-    internal static bool IsSupported(string extension) =>
-        ImageExtensions.Contains(extension) || VideoExtensions.Contains(extension) || AudioExtensions.Contains(extension);
+    private bool IsSupported(string extension) =>
+        MediaFileExtensions.All.Contains(extension, StringComparer.OrdinalIgnoreCase)
+        && settingsSession.Current.IncludedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
 
     private static MediaType ResolveMediaType(string extension) =>
-        ImageExtensions.Contains(extension) ? MediaType.Image
-        : VideoExtensions.Contains(extension) ? MediaType.Video
-        : AudioExtensions.Contains(extension) ? MediaType.Audio
+        MediaFileExtensions.Images.Contains(extension, StringComparer.OrdinalIgnoreCase) ? MediaType.Image
+        : MediaFileExtensions.Videos.Contains(extension, StringComparer.OrdinalIgnoreCase) ? MediaType.Video
+        : MediaFileExtensions.Audio.Contains(extension, StringComparer.OrdinalIgnoreCase) ? MediaType.Audio
         : MediaType.Unknown;
 }

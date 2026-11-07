@@ -8,7 +8,7 @@ public interface ILibraryRepository
 
     Task AddAsync(LibraryDefinition library, CancellationToken cancellationToken);
 
-    Task RemoveAsync(string id, CancellationToken cancellationToken);
+    Task RemoveAsync(Guid id, CancellationToken cancellationToken);
 
-    Task SetEnabledAsync(string id, bool isEnabled, CancellationToken cancellationToken);
+    Task SetEnabledAsync(Guid id, bool isEnabled, CancellationToken cancellationToken);
 }

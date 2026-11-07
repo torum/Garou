@@ -4,7 +4,6 @@ using Garou.Application.Queries;
 using Garou.Domain.Abstractions;
 using Garou.Infrastructure.Metadata;
 using Garou.Infrastructure.Persistence;
-using Garou.Infrastructure.Persistence.Migrations;
 using Garou.Infrastructure.Persistence.Repositories;
 using Garou.Infrastructure.Settings;
 using Garou.Infrastructure.Sync;
@@ -45,7 +44,7 @@ public static class ServiceRegistration
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new SqliteConnectionFactory($"Data Source={databasePath}"));
-        services.AddSingleton<MigrationRunner>();
+        services.AddSingleton<DatabaseInitializer>();
         services.AddSingleton<DatabaseMaintenanceService>();
         services.AddSingleton<BatchWriter>();
 

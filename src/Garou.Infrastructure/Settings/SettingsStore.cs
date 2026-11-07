@@ -41,13 +41,14 @@ public sealed class SettingsStore(string settingsFilePath)
                 ThumbnailCacheLimitBytes = long.TryParse(root?.Element("ThumbnailCacheLimitBytes")?.Value, out var limit)
                     ? limit
                     : new AppSettings().ThumbnailCacheLimitBytes,
-                SelectedFolderId = long.TryParse(root?.Element("SelectedFolderId")?.Value, out var folderId)
+                IncludedExtensions = ReadIncludedExtensions(root),
+                SelectedFolderId = Guid.TryParse(root?.Element("SelectedFolderId")?.Value, out var folderId)
                     ? folderId
                     : null,
                 ExpandedFolderIds = (root?.Element("ExpandedFolderIds")?.Value ?? string.Empty)
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Select(id => long.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : (long?)null)
-                    .OfType<long>()
+                    .Select(id => Guid.TryParse(id, out var value) ? value : (Guid?)null)
+                    .OfType<Guid>()
                     .ToList(),
                 IsDetailsPaneOpen = bool.TryParse(root?.Element("IsDetailsPaneOpen")?.Value, out var isDetailsPaneOpen)
                     ? isDetailsPaneOpen
@@ -67,6 +68,15 @@ public sealed class SettingsStore(string settingsFilePath)
                 IncludeDescendants = bool.TryParse(root?.Element("IncludeDescendants")?.Value, out var includeDescendants)
                     ? includeDescendants
                     : new AppSettings().IncludeDescendants,
+                ScanSubfolders = bool.TryParse(root?.Element("ScanSubfolders")?.Value, out var scanSubfolders)
+                    ? scanSubfolders
+                    : new AppSettings().ScanSubfolders,
+                ImageViewerApplicationPath = root?.Element("ImageViewerApplicationPath")?.Value ?? string.Empty,
+                ImageEditorApplicationPath = root?.Element("ImageEditorApplicationPath")?.Value ?? string.Empty,
+                VideoViewerApplicationPath = root?.Element("VideoViewerApplicationPath")?.Value ?? string.Empty,
+                VideoEditorApplicationPath = root?.Element("VideoEditorApplicationPath")?.Value ?? string.Empty,
+                AudioViewerApplicationPath = root?.Element("AudioViewerApplicationPath")?.Value ?? string.Empty,
+                AudioEditorApplicationPath = root?.Element("AudioEditorApplicationPath")?.Value ?? string.Empty,
                 WindowWidth = double.TryParse(root?.Element("WindowWidth")?.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var windowWidth) && double.IsFinite(windowWidth)
                     ? windowWidth
                     : null,
@@ -105,14 +115,22 @@ public sealed class SettingsStore(string settingsFilePath)
                 new XElement("Settings",
                     new XElement("Language", settings.Language),
                     new XElement("ThumbnailCacheLimitBytes", settings.ThumbnailCacheLimitBytes),
-                    new XElement("SelectedFolderId", settings.SelectedFolderId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
-                    new XElement("ExpandedFolderIds", string.Join(',', settings.ExpandedFolderIds.Select(id => id.ToString(CultureInfo.InvariantCulture)))),
+                    new XElement("IncludedExtensions", settings.IncludedExtensions.Select(extension => new XElement("Extension", extension))),
+                    new XElement("SelectedFolderId", settings.SelectedFolderId?.ToString("N") ?? string.Empty),
+                    new XElement("ExpandedFolderIds", string.Join(',', settings.ExpandedFolderIds.Select(id => id.ToString("N")))),
                     new XElement("IsDetailsPaneOpen", settings.IsDetailsPaneOpen.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ThumbnailSize", settings.ThumbnailSize.ToString(CultureInfo.InvariantCulture)),
                     new XElement("LeftPaneWidth", settings.LeftPaneWidth.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ShowFileNames", settings.ShowFileNames.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ShowFileTypeBadges", settings.ShowFileTypeBadges.ToString(CultureInfo.InvariantCulture)),
                     new XElement("IncludeDescendants", settings.IncludeDescendants.ToString(CultureInfo.InvariantCulture)),
+                    new XElement("ScanSubfolders", settings.ScanSubfolders.ToString(CultureInfo.InvariantCulture)),
+                    new XElement("ImageViewerApplicationPath", settings.ImageViewerApplicationPath),
+                    new XElement("ImageEditorApplicationPath", settings.ImageEditorApplicationPath),
+                    new XElement("VideoViewerApplicationPath", settings.VideoViewerApplicationPath),
+                    new XElement("VideoEditorApplicationPath", settings.VideoEditorApplicationPath),
+                    new XElement("AudioViewerApplicationPath", settings.AudioViewerApplicationPath),
+                    new XElement("AudioEditorApplicationPath", settings.AudioEditorApplicationPath),
                     new XElement("WindowWidth", settings.WindowWidth?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                     new XElement("WindowHeight", settings.WindowHeight?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                     new XElement("WindowX", settings.WindowX?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
@@ -126,5 +144,27 @@ public sealed class SettingsStore(string settingsFilePath)
         {
             _fileAccess.Release();
         }
+    }
+
+    private static List<string> ReadIncludedExtensions(XElement? root)
+    {
+        var storedExtensions = root?.Element("IncludedExtensions");
+        if (storedExtensions is null)
+        {
+            return [.. MediaFileExtensions.All];
+        }
+
+        var extensions = storedExtensions.Elements("Extension")
+            .Select(extension => extension.Value)
+            .Where(extension => MediaFileExtensions.All.Contains(extension, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (extensions.Count == MediaFileExtensions.LegacyAll.Count
+            && MediaFileExtensions.LegacyAll.All(extension => extensions.Contains(extension, StringComparer.OrdinalIgnoreCase)))
+        {
+            return [.. MediaFileExtensions.All];
+        }
+
+        return extensions;
     }
 }

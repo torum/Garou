@@ -40,6 +40,69 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task WhenIncludedExtensionsAreSavedThenTheyAreRestored()
+    {
+        var extensions = new List<string> { ".mp4", ".png" };
+        var store = new SettingsStore(_settingsPath);
+        await store.SaveAsync(new AppSettings { IncludedExtensions = extensions }, CancellationToken.None);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(extensions, loaded.IncludedExtensions);
+    }
+
+    [Fact]
+    public async Task WhenIncludedExtensionsAreMissingThenAllSupportedExtensionsAreEnabled()
+    {
+        await File.WriteAllTextAsync(_settingsPath, "<Settings />", TestContext.Current.CancellationToken);
+        var store = new SettingsStore(_settingsPath);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(MediaFileExtensions.All, loaded.IncludedExtensions);
+    }
+
+    [Fact]
+    public async Task WhenLegacyDefaultExtensionListIsLoadedThenExpandedCatalogIsEnabled()
+    {
+        var store = new SettingsStore(_settingsPath);
+        await store.SaveAsync(new AppSettings { IncludedExtensions = [.. MediaFileExtensions.LegacyAll] }, CancellationToken.None);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(MediaFileExtensions.All, loaded.IncludedExtensions);
+    }
+
+    [Fact]
+    public void WhenBroadExtensionCatalogIsReadThenPlayableFormatsAreIncludedAndPlaylistsOrDiscImagesAreExcluded()
+    {
+        Assert.Contains(".flv", MediaFileExtensions.Videos);
+        Assert.Contains(".avif", MediaFileExtensions.Images);
+        Assert.Contains(".opus", MediaFileExtensions.Audio);
+        Assert.DoesNotContain(".m3u8", MediaFileExtensions.All);
+        Assert.DoesNotContain(".iso", MediaFileExtensions.All);
+        Assert.DoesNotContain(".vob", MediaFileExtensions.All);
+    }
+
+    [Fact]
+    public async Task WhenFolderSelectionIsSavedThenUuidIsPreserved()
+    {
+        var selectedFolderId = Guid.CreateVersion7();
+        var expandedFolderId = Guid.CreateVersion7();
+        var store = new SettingsStore(_settingsPath);
+        await store.SaveAsync(new AppSettings
+        {
+            SelectedFolderId = selectedFolderId,
+            ExpandedFolderIds = [expandedFolderId]
+        }, CancellationToken.None);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(selectedFolderId, loaded.SelectedFolderId);
+        Assert.Equal(expandedFolderId, Assert.Single(loaded.ExpandedFolderIds));
+    }
+
+    [Fact]
     public async Task WhenMaximumThumbnailSizeIsSavedThenItIsRestored()
     {
         var store = new SettingsStore(_settingsPath);
@@ -125,6 +188,70 @@ public sealed class SettingsStoreTests : IDisposable
         var loaded = await store.LoadAsync(CancellationToken.None);
 
         Assert.True(loaded.IncludeDescendants);
+    }
+
+    [Fact]
+    public async Task WhenScanSubfoldersPreferenceIsSavedThenItIsRestored()
+    {
+        var store = new SettingsStore(_settingsPath);
+        await store.SaveAsync(new AppSettings { ScanSubfolders = false }, CancellationToken.None);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.False(loaded.ScanSubfolders);
+    }
+
+    [Fact]
+    public async Task WhenMediaTypeApplicationPathsAreSavedThenTheyAreRestored()
+    {
+        var store = new SettingsStore(_settingsPath);
+        await store.SaveAsync(new AppSettings
+        {
+            ImageViewerApplicationPath = @"C:\Apps\ImageViewer.exe",
+            ImageEditorApplicationPath = @"C:\Apps\ImageEditor.exe",
+            VideoViewerApplicationPath = @"C:\Apps\VideoViewer.exe",
+            VideoEditorApplicationPath = @"C:\Apps\VideoEditor.exe",
+            AudioViewerApplicationPath = @"C:\Apps\AudioViewer.exe",
+            AudioEditorApplicationPath = @"C:\Apps\AudioEditor.exe"
+        }, CancellationToken.None);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(@"C:\Apps\ImageViewer.exe", loaded.ImageViewerApplicationPath);
+        Assert.Equal(@"C:\Apps\ImageEditor.exe", loaded.ImageEditorApplicationPath);
+        Assert.Equal(@"C:\Apps\VideoViewer.exe", loaded.VideoViewerApplicationPath);
+        Assert.Equal(@"C:\Apps\VideoEditor.exe", loaded.VideoEditorApplicationPath);
+        Assert.Equal(@"C:\Apps\AudioViewer.exe", loaded.AudioViewerApplicationPath);
+        Assert.Equal(@"C:\Apps\AudioEditor.exe", loaded.AudioEditorApplicationPath);
+    }
+
+    [Fact]
+    public async Task WhenGlobalApplicationPathsAreLoadedThenMediaTypePathsRemainEmpty()
+    {
+        await File.WriteAllTextAsync(_settingsPath,
+            "<Settings><ViewerApplicationPath>viewer.exe</ViewerApplicationPath><EditorApplicationPath>editor.exe</EditorApplicationPath></Settings>",
+            TestContext.Current.CancellationToken);
+        var store = new SettingsStore(_settingsPath);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Empty(loaded.ImageViewerApplicationPath);
+        Assert.Empty(loaded.ImageEditorApplicationPath);
+        Assert.Empty(loaded.VideoViewerApplicationPath);
+        Assert.Empty(loaded.VideoEditorApplicationPath);
+        Assert.Empty(loaded.AudioViewerApplicationPath);
+        Assert.Empty(loaded.AudioEditorApplicationPath);
+    }
+
+    [Fact]
+    public async Task WhenScanSubfoldersPreferenceIsMissingThenItDefaultsToTrue()
+    {
+        await File.WriteAllTextAsync(_settingsPath, "<Settings />", TestContext.Current.CancellationToken);
+        var store = new SettingsStore(_settingsPath);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.True(loaded.ScanSubfolders);
     }
 
     [Fact]

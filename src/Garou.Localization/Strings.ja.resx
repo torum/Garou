@@ -70,4 +70,109 @@
   <data name="ThumbnailCacheLimitLabel" xml:space="preserve">
 	<value>サムネイルキャッシュの上限</value>
   </data>
+  <data name="ImageViewerApplicationPathLabel" xml:space="preserve">
+	<value>画像ビューアーのアプリケーションパス</value>
+  </data>
+	<data name="ImageEditorApplicationPathLabel" xml:space="preserve">
+	<value>画像編集アプリケーションのパス</value>
+  </data>
+  <data name="VideoViewerApplicationPathLabel" xml:space="preserve">
+	<value>動画プレーヤーのアプリケーションパス</value>
+  </data>
+  <data name="VideoEditorApplicationPathLabel" xml:space="preserve">
+	<value>動画編集アプリケーションのパス</value>
+  </data>
+  <data name="AudioViewerApplicationPathLabel" xml:space="preserve">
+	<value>音楽プレーヤーのアプリケーションパス</value>
+  </data>
+  <data name="AudioEditorApplicationPathLabel" xml:space="preserve">
+	<value>音声編集アプリケーションのパス</value>
+  </data>
+  <data name="ApplicationPathDescription" xml:space="preserve">
+	<value>各アプリの実行可能ファイルのパスを入力してください。選択したメディアファイルは引数として渡されます。</value>
+  </data>
+	<data name="ViewImageWithViewer" xml:space="preserve">
+	<value>画像ビューアーで表示</value>
+  </data>
+  <data name="PlayVideoWithPlayer" xml:space="preserve">
+	<value>動画プレーヤーで再生</value>
+  </data>
+  <data name="PlayAudioWithPlayer" xml:space="preserve">
+	<value>音楽プレーヤーで再生</value>
+  </data>
+  <data name="EditImageWithEditor" xml:space="preserve">
+	<value>画像エディターで編集</value>
+  </data>
+  <data name="EditVideoWithEditor" xml:space="preserve">
+	<value>動画エディターで編集</value>
+  </data>
+  <data name="EditAudioWithEditor" xml:space="preserve">
+	<value>音声エディターで編集</value>
+  </data>
+  <data name="OpenWithViewer" xml:space="preserve">
+	<value>ビューアーで開く</value>
+  </data>
+  <data name="OpenWithEditor" xml:space="preserve">
+	<value>エディターで開く</value>
+  </data>
+  <data name="OpenWithDefaultApplication" xml:space="preserve">
+	<value>既定のアプリで開く</value>
+  </data>
+	<data name="OpenFolder" xml:space="preserve">
+	<value>フォルダーを開く</value>
+  </data>
+  <data name="ClearFolderThumbnailCache" xml:space="preserve">
+	<value>フォルダーのサムネイルキャッシュを削除</value>
+  </data>
+	<data name="RemoveFolderFromLibrary" xml:space="preserve">
+	<value>ライブラリからフォルダーを削除</value>
+  </data>
+  <data name="OpenContainingFolder" xml:space="preserve">
+	<value>保存先フォルダーを開く</value>
+  </data>
+  <data name="OpenThumbnailCacheFolder" xml:space="preserve">
+	<value>サムネイルキャッシュフォルダーを開く</value>
+  </data>
+  <data name="IncludedExtensionsLabel" xml:space="preserve">
+	<value>対象のファイル拡張子</value>
+  </data>
+  <data name="IncludedExtensionsDescription" xml:space="preserve">
+	<value>ライブラリのスキャンには選択した拡張子のみが含まれます。</value>
+  </data>
+	<data name="ImageMediaType" xml:space="preserve">
+	<value>画像</value>
+  </data>
+  <data name="VideoMediaType" xml:space="preserve">
+	<value>動画</value>
+  </data>
+  <data name="AudioMediaType" xml:space="preserve">
+	<value>音声</value>
+  </data>
+  <data name="MegabytesUnit" xml:space="preserve">
+	<value>MB</value>
+  </data>
+  <data name="IncludeSubfoldersLabel" xml:space="preserve">
+	<value>フォルダー表示時にサブフォルダーの項目を含める</value>
+  </data>
+	<data name="ScanSubfoldersLabel" xml:space="preserve">
+	<value>サブフォルダー内のファイルもスキャンする</value>
+  </data>
+  <data name="ScanSubfoldersDescription" xml:space="preserve">
+	<value>無効にすると、次回の全体スキャンでサブフォルダー内の項目がインデックスから削除されます。</value>
+  </data>
+  <data name="SaveSettingsLabel" xml:space="preserve">
+	<value>設定を保存</value>
+  </data>
+  <data name="CloseLabel" xml:space="preserve">
+	<value>閉じる</value>
+  </data>
+  <data name="SettingsSaved" xml:space="preserve">
+	<value>設定を保存しました。拡張子の変更は次回の全体スキャンで適用されます。</value>
+  </data>
+  <data name="InvalidCacheLimit" xml:space="preserve">
+	<value>キャッシュ上限は1～1023 MBで指定してください。</value>
+  </data>
+  <data name="SelectAtLeastOneExtension" xml:space="preserve">
+	<value>少なくとも1つのファイル拡張子を選択してください。</value>
+  </data>
 </root>

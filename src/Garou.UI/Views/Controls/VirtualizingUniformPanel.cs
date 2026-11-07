@@ -69,6 +69,15 @@ public class VirtualizingUniformPanel : VirtualizingPanel
         InvalidateMeasure();
     }
 
+    internal void RefreshVisibleItems()
+    {
+        _lastFirstVisibleIndex = -1;
+        _lastLastVisibleIndex = -1;
+        _lastItemCount = -1;
+        _lastVisibleDataItems.Clear();
+        InvalidateMeasure();
+    }
+
     protected override Size MeasureOverride(Size availableSize)
     {
         var items = Items;

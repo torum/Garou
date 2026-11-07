@@ -19,12 +19,12 @@ public enum MediaTypeFilter
 }
 
 public sealed record MediaQuery(
-    long? FolderId,
+    Guid? FolderId,
     string? SearchText,
     MediaTypeFilter MediaType,
     MediaSortField SortField,
     bool Descending,
-    long AfterId,
+    Guid AfterId,
     int PageSize,
     bool IncludeDescendants = true);
 
@@ -53,7 +53,7 @@ public static class MediaQueryBuilder
             conditions.Add(query.IncludeDescendants
                 ? "FolderId IN (WITH RECURSIVE Tree(Id) AS (SELECT Id FROM Folder WHERE Id = $folderId UNION ALL SELECT f.Id FROM Folder f JOIN Tree t ON f.ParentId = t.Id) SELECT Id FROM Tree)"
                 : "FolderId = $folderId");
-            parameters["$folderId"] = query.FolderId;
+            parameters["$folderId"] = query.FolderId?.ToString("N");
         }
 
         if (!string.IsNullOrWhiteSpace(query.SearchText))
@@ -126,7 +126,7 @@ public static class MediaQueryBuilder
         var direction = query.Descending ? "DESC" : "ASC";
         var (conditions, parameters) = BuildFilter(query);
         conditions.Insert(0, "Id > $afterId");
-        parameters["$afterId"] = query.AfterId;
+        parameters["$afterId"] = query.AfterId.ToString("N");
         parameters["$pageSize"] = pageSize;
 
         var orderBy = query.SortField == MediaSortField.Id
@@ -134,9 +134,8 @@ public static class MediaQueryBuilder
             : $"{sortColumn} {direction}, Id ASC";
 
         var sql = $"""
-            SELECT Id, Path, FileName, Extension, MediaType, FileSize, MimeType, Width, Height,
-                   DurationSeconds, HashValue, ThumbnailPath, CreatedDateUtc, ModifiedDateUtc,
-                   LastIndexedUtc, FolderId
+            SELECT Id, Path, FileName, Extension, MediaType, FileSize, HashValue, ThumbnailPath,
+                   CreatedDateUtc, ModifiedDateUtc, LastIndexedUtc, FolderId
             FROM MediaFile
             WHERE {string.Join(" AND ", conditions)}
             ORDER BY {orderBy}

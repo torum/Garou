@@ -5,42 +5,39 @@ namespace Garou.Application.Libraries;
 
 public sealed class LibraryCommands(ILibraryRepository libraries, ILibraryScanner scanner)
 {
-    public async Task AddLibraryAsync(string id, string rootPath, CancellationToken cancellationToken)
+    public async Task<Guid> AddLibraryAsync(string rootPath, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
 
         var fullPath = Path.GetFullPath(rootPath);
         var existing = await libraries.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        if (existing.Any(library => library.Id == id || string.Equals(library.RootPath, fullPath, StringComparison.OrdinalIgnoreCase)))
+        if (existing.Any(library => string.Equals(library.RootPath, fullPath, StringComparison.OrdinalIgnoreCase)))
         {
-            throw new InvalidOperationException($"A library with id '{id}' or root '{fullPath}' already exists.");
+            throw new InvalidOperationException($"A library with root '{fullPath}' already exists.");
         }
 
+        var id = Guid.CreateVersion7();
         await libraries.AddAsync(new LibraryDefinition { Id = id, RootPath = fullPath }, cancellationToken).ConfigureAwait(false);
+        return id;
     }
 
-    public Task RemoveLibraryAsync(string id, CancellationToken cancellationToken)
+    public Task RemoveLibraryAsync(Guid id, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
         return libraries.RemoveAsync(id, cancellationToken);
     }
 
-    public Task EnableLibraryAsync(string id, CancellationToken cancellationToken)
+    public Task EnableLibraryAsync(Guid id, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
         return libraries.SetEnabledAsync(id, true, cancellationToken);
     }
 
-    public Task DisableLibraryAsync(string id, CancellationToken cancellationToken)
+    public Task DisableLibraryAsync(Guid id, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
         return libraries.SetEnabledAsync(id, false, cancellationToken);
     }
 
-    public async Task RefreshLibraryAsync(string id, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
+    public async Task RefreshLibraryAsync(Guid id, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
         var library = await FindAsync(id, cancellationToken).ConfigureAwait(false);
         await scanner.ScanAsync(library, progress, cancellationToken).ConfigureAwait(false);
     }
@@ -55,15 +52,14 @@ public sealed class LibraryCommands(ILibraryRepository libraries, ILibraryScanne
         await scanner.ScanAsync(library, progress, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task ReindexLibraryAsync(string id, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
+    public async Task ReindexLibraryAsync(Guid id, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
         var library = await FindAsync(id, cancellationToken).ConfigureAwait(false);
         library.IsOnline = true;
         await scanner.ScanAsync(library, progress, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<LibraryDefinition> FindAsync(string id, CancellationToken cancellationToken)
+    private async Task<LibraryDefinition> FindAsync(Guid id, CancellationToken cancellationToken)
     {
         var all = await libraries.GetAllAsync(cancellationToken).ConfigureAwait(false);
         return all.FirstOrDefault(library => library.Id == id)

@@ -6,12 +6,7 @@ namespace Garou.Infrastructure.Metadata;
 
 public sealed class VideoMetadataProvider(string ffprobePath) : IMediaMetadataProvider
 {
-    private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".mp4", ".mkv", ".mov", ".avi", ".wmv", ".webm", ".m4v", ".mpg", ".mpeg"
-    };
-
-    public bool Supports(string extension) => SupportedExtensions.Contains(extension);
+    public bool Supports(string extension) => true;
 
     public async Task<MediaMetadata> ReadAsync(string filePath, CancellationToken cancellationToken)
     {

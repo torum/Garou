@@ -70,4 +70,109 @@
   <data name="ThumbnailCacheLimitLabel" xml:space="preserve">
 	<value>Thumbnail cache limit</value>
   </data>
+  <data name="ImageViewerApplicationPathLabel" xml:space="preserve">
+	<value>Image viewer application path</value>
+  </data>
+	<data name="ImageEditorApplicationPathLabel" xml:space="preserve">
+	<value>Image editor application path</value>
+  </data>
+  <data name="VideoViewerApplicationPathLabel" xml:space="preserve">
+	<value>Video player application path</value>
+  </data>
+  <data name="VideoEditorApplicationPathLabel" xml:space="preserve">
+	<value>Video editor application path</value>
+  </data>
+  <data name="AudioViewerApplicationPathLabel" xml:space="preserve">
+	<value>Audio player application path</value>
+  </data>
+  <data name="AudioEditorApplicationPathLabel" xml:space="preserve">
+	<value>Audio editor application path</value>
+  </data>
+  <data name="ApplicationPathDescription" xml:space="preserve">
+	<value>Enter the executable path for each app. The selected media file is passed as an argument.</value>
+  </data>
+	<data name="ViewImageWithViewer" xml:space="preserve">
+	<value>View with image viewer</value>
+  </data>
+  <data name="PlayVideoWithPlayer" xml:space="preserve">
+	<value>Play with video player</value>
+  </data>
+  <data name="PlayAudioWithPlayer" xml:space="preserve">
+	<value>Play with audio player</value>
+  </data>
+  <data name="EditImageWithEditor" xml:space="preserve">
+	<value>Edit with image editor</value>
+  </data>
+  <data name="EditVideoWithEditor" xml:space="preserve">
+	<value>Edit with video editor</value>
+  </data>
+  <data name="EditAudioWithEditor" xml:space="preserve">
+	<value>Edit with audio editor</value>
+  </data>
+  <data name="OpenWithViewer" xml:space="preserve">
+	<value>Open with viewer</value>
+  </data>
+  <data name="OpenWithEditor" xml:space="preserve">
+	<value>Open with editor</value>
+  </data>
+  <data name="OpenWithDefaultApplication" xml:space="preserve">
+	<value>Open with default app</value>
+  </data>
+	<data name="OpenFolder" xml:space="preserve">
+	<value>Open folder</value>
+  </data>
+  <data name="ClearFolderThumbnailCache" xml:space="preserve">
+	<value>Clear folder thumbnail cache</value>
+  </data>
+	<data name="RemoveFolderFromLibrary" xml:space="preserve">
+	<value>Remove folder from library</value>
+  </data>
+  <data name="OpenContainingFolder" xml:space="preserve">
+	<value>Open containing folder</value>
+  </data>
+  <data name="OpenThumbnailCacheFolder" xml:space="preserve">
+	<value>Open thumbnail cache folder</value>
+  </data>
+  <data name="IncludedExtensionsLabel" xml:space="preserve">
+	<value>Included file extensions</value>
+  </data>
+  <data name="IncludedExtensionsDescription" xml:space="preserve">
+	<value>Only selected extensions are included when scanning libraries.</value>
+  </data>
+	<data name="ImageMediaType" xml:space="preserve">
+	<value>Images</value>
+  </data>
+  <data name="VideoMediaType" xml:space="preserve">
+	<value>Videos</value>
+  </data>
+  <data name="AudioMediaType" xml:space="preserve">
+	<value>Audio</value>
+  </data>
+  <data name="MegabytesUnit" xml:space="preserve">
+	<value>MB</value>
+  </data>
+  <data name="IncludeSubfoldersLabel" xml:space="preserve">
+	<value>Include items in subfolders when viewing a folder</value>
+  </data>
+	<data name="ScanSubfoldersLabel" xml:space="preserve">
+	<value>Scan files in subfolders</value>
+  </data>
+  <data name="ScanSubfoldersDescription" xml:space="preserve">
+	<value>When disabled, nested indexed files are removed by the next full scan.</value>
+  </data>
+  <data name="SaveSettingsLabel" xml:space="preserve">
+	<value>Save preferences</value>
+  </data>
+  <data name="CloseLabel" xml:space="preserve">
+	<value>Close</value>
+  </data>
+  <data name="SettingsSaved" xml:space="preserve">
+	<value>Preferences saved. Extension changes apply on the next full scan.</value>
+  </data>
+  <data name="InvalidCacheLimit" xml:space="preserve">
+	<value>Choose a cache limit between 1 and 1023 MB.</value>
+  </data>
+  <data name="SelectAtLeastOneExtension" xml:space="preserve">
+	<value>Select at least one file extension.</value>
+  </data>
 </root>

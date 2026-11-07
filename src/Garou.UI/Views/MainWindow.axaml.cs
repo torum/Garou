@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -9,7 +10,10 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Garou.Application.Queries;
 using Garou.Domain.Entities;
+using Garou.Domain.Enums;
+using Garou.Domain.Models;
 using Garou.Infrastructure.Settings;
+using Garou.Localization;
 using Garou.UI.Converters;
 using Garou.ViewModels;
 using Garou.Views.Controls;
@@ -20,6 +24,7 @@ public partial class MainWindow : Window
 {
     private static readonly double LoadMoreThresholdPixels = 400;
     private readonly AppSettingsSession _settingsSession;
+    private VirtualizingUniformPanel? _mediaPanel;
     private double _normalWidth;
     private double _normalHeight;
     private PixelPoint _normalPosition;
@@ -32,6 +37,7 @@ public partial class MainWindow : Window
         
         InitializeComponent();
 
+        MediaListBox.AddHandler(InputElement.KeyDownEvent, OnMediaListKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         LeftPaneGridSplitter.AddHandler(InputElement.PointerReleasedEvent, OnGridSplitterPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
         MediaListBox.AddHandler(ScrollViewer.ScrollChangedEvent, OnMediaListScrollChanged);
         Loaded += OnLoaded;
@@ -46,7 +52,6 @@ public partial class MainWindow : Window
                 {
                     _wasMaximized = WindowState == WindowState.Maximized;
                 }
-
                 CacheNormalBounds();
             }
         };
@@ -62,9 +67,14 @@ public partial class MainWindow : Window
             viewModel.OnRenderScalingChanged(TopLevel.GetTopLevel(this)?.RenderScaling ?? 1);
         }
 
-        if (MediaListBox.GetVisualDescendants().OfType<VirtualizingUniformPanel>().FirstOrDefault() is { } panel)
+        AttachToMediaPanel();
+    }
+
+    private async void OnMediaSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
         {
-            panel.VisibleItemsChanged += OnVisibleItemsChanged;
+            await viewModel.LoadSelectedMetadataAsync();
         }
     }
 
@@ -149,6 +159,14 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void OnSettingsClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            await new SettingsWindow(viewModel).ShowDialog(this);
+        }
+    }
+
     private void OnVisibleItemsChanged(object? sender, List<object> items)
     {
         if (DataContext is MainViewModel viewModel)
@@ -191,6 +209,32 @@ public partial class MainWindow : Window
             return;
         }
 
+        OpenWithDefaultApplication(mediaFile, viewModel);
+    }
+
+    private void OnMediaListKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter
+            || DataContext is not MainViewModel { SelectedItem: { File: var mediaFile } } viewModel)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        OpenWithDefaultApplication(mediaFile, viewModel);
+    }
+
+    private void OnOpenWithDefaultApplicationClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { DataContext: MediaItemViewModel { File: var mediaFile } }
+            && DataContext is MainViewModel viewModel)
+        {
+            OpenWithDefaultApplication(mediaFile, viewModel);
+        }
+    }
+
+    private static void OpenWithDefaultApplication(MediaFile mediaFile, MainViewModel viewModel)
+    {
         try
         {
             Process.Start(new ProcessStartInfo(mediaFile.Path)
@@ -203,6 +247,115 @@ public partial class MainWindow : Window
             viewModel.StatusText = $"Could not open {mediaFile.FileName}: {exception.Message}";
         }
     }
+
+    private void OnLaunchWithViewerClick(object? sender, RoutedEventArgs e)
+    {
+        LaunchWithConfiguredApplication(sender, isEditor: false);
+    }
+
+    private void OnLaunchWithEditorClick(object? sender, RoutedEventArgs e)
+    {
+        LaunchWithConfiguredApplication(sender, isEditor: true);
+    }
+
+    private void LaunchWithConfiguredApplication(object? sender, bool isEditor)
+    {
+        if (sender is not MenuItem { DataContext: MediaItemViewModel { File: var mediaFile } }
+            || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var applicationPath = GetConfiguredApplicationPath(_settingsSession.Current, mediaFile.MediaType, isEditor);
+        var mediaTypeName = mediaFile.MediaType switch
+        {
+            MediaType.Image => "image",
+            MediaType.Video => "video",
+            MediaType.Audio => "audio",
+            _ => "media"
+        };
+        var applicationType = $"{mediaTypeName} {(isEditor ? "editor" : "viewer")}";
+
+        if (string.IsNullOrWhiteSpace(applicationPath))
+        {
+            viewModel.StatusText = $"Configure a {applicationType} application path in settings first.";
+            return;
+        }
+
+        try
+        {
+            if (!File.Exists(applicationPath))
+            {
+                throw new FileNotFoundException("The configured application was not found.", applicationPath);
+            }
+
+            var startInfo = new ProcessStartInfo(applicationPath)
+            {
+                UseShellExecute = false
+            };
+            startInfo.ArgumentList.Add(mediaFile.Path);
+            Process.Start(startInfo);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or FileNotFoundException or UnauthorizedAccessException)
+        {
+            viewModel.StatusText = $"Could not open {mediaFile.FileName} with the configured {applicationType}: {exception.Message}";
+        }
+    }
+
+    private void OnContextMenuOpened(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu contextMenu)
+        {
+            return;
+        }
+
+        var settings = _settingsSession.Current;
+        var localizer = new ResourceLocalizer(CultureInfo.GetCultureInfo(settings.Language == "ja" ? "ja" : "en"));
+        foreach (var menuItem in contextMenu.Items.OfType<MenuItem>())
+        {
+            if (menuItem.Tag is not string tag)
+            {
+                continue;
+            }
+
+            if (tag is "viewer" or "editor")
+            {
+                if (contextMenu.DataContext is not MediaItemViewModel mediaItem)
+                {
+                    menuItem.IsEnabled = false;
+                    continue;
+                }
+
+                var isEditor = tag == "editor";
+                menuItem.Header = GetMediaActionHeader(localizer, mediaItem.MediaType, isEditor);
+                menuItem.IsEnabled = !string.IsNullOrWhiteSpace(
+                    GetConfiguredApplicationPath(settings, mediaItem.MediaType, isEditor));
+                continue;
+            }
+
+            menuItem.Header = localizer[tag];
+        }
+    }
+
+    private static string GetMediaActionHeader(ResourceLocalizer localizer, MediaType mediaType, bool isEditor) =>
+        (mediaType, isEditor) switch
+        {
+            (MediaType.Image, false) => localizer["ViewImageWithViewer"],
+            (MediaType.Video, false) => localizer["PlayVideoWithPlayer"],
+            (MediaType.Audio, false) => localizer["PlayAudioWithPlayer"],
+            (MediaType.Image, true) => localizer["EditImageWithEditor"],
+            (MediaType.Video, true) => localizer["EditVideoWithEditor"],
+            (MediaType.Audio, true) => localizer["EditAudioWithEditor"],
+            _ => localizer[isEditor ? "OpenWithEditor" : "OpenWithViewer"]
+        };
+
+    private static string GetConfiguredApplicationPath(AppSettings settings, MediaType mediaType, bool isEditor) => mediaType switch
+    {
+        MediaType.Image => isEditor ? settings.ImageEditorApplicationPath : settings.ImageViewerApplicationPath,
+        MediaType.Video => isEditor ? settings.VideoEditorApplicationPath : settings.VideoViewerApplicationPath,
+        MediaType.Audio => isEditor ? settings.AudioEditorApplicationPath : settings.AudioViewerApplicationPath,
+        _ => string.Empty
+    };
 
     private void OnOpenContainingFolderClick(object? sender, RoutedEventArgs e)
     {
@@ -292,7 +445,29 @@ public partial class MainWindow : Window
         {
             viewModel.FolderRestored += OnFolderRestored;
             await viewModel.InitializeAsync(CancellationToken.None);
+            AttachToMediaPanel();
+            _mediaPanel?.RefreshVisibleItems();
             MainLayoutGrid.ColumnDefinitions[0].Width = new GridLength(viewModel.LeftPaneWidth);
+        }
+    }
+
+    private void AttachToMediaPanel()
+    {
+        var panel = MediaListBox.GetVisualDescendants().OfType<VirtualizingUniformPanel>().FirstOrDefault();
+        if (ReferenceEquals(panel, _mediaPanel))
+        {
+            return;
+        }
+
+        if (_mediaPanel is not null)
+        {
+            _mediaPanel.VisibleItemsChanged -= OnVisibleItemsChanged;
+        }
+
+        _mediaPanel = panel;
+        if (_mediaPanel is not null)
+        {
+            _mediaPanel.VisibleItemsChanged += OnVisibleItemsChanged;
         }
     }
 
@@ -322,7 +497,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ExpandSaved(ItemsControl container, HashSet<long> expandedIds)
+    private void ExpandSaved(ItemsControl container, HashSet<Guid> expandedIds)
     {
         foreach (var node in container.ItemsSource?.OfType<FolderNode>() ?? [])
         {

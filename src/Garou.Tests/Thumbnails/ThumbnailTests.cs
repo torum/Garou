@@ -29,7 +29,7 @@ public sealed class ThumbnailTests
     }
 
     [Fact]
-    public void WhenWidthIsSpecifiedThenArgumentsScaleToRequestedSize()
+    public void WhenSizeIsSpecifiedThenArgumentsScaleToRequestedSize()
     {
         var media = new MediaFile { Path = "photo.jpg", FileName = "photo.jpg", Extension = ".jpg", MediaType = MediaType.Image };
 
@@ -41,7 +41,17 @@ public sealed class ThumbnailTests
     }
 
     [Fact]
-    public void WhenWidthDiffersThenThumbnailCacheNamesDiffer()
+    public void WhenMediaIsVideoThenArgumentsSeekToThreeSeconds()
+    {
+        var media = new MediaFile { Path = "clip.mp4", FileName = "clip.mp4", Extension = ".mp4", MediaType = MediaType.Video };
+
+        var arguments = ThumbnailGeneratorService.BuildArguments(media, "thumbnail.jpg");
+
+        Assert.Equal("3", arguments[2]);
+    }
+
+    [Fact]
+    public void WhenSizeDiffersThenThumbnailCacheNamesDiffer()
     {
         var standard = ThumbnailGeneratorService.ThumbnailFileName("photo.jpg", 320);
         var highResolution = ThumbnailGeneratorService.ThumbnailFileName("photo.jpg", 280);
@@ -50,16 +60,16 @@ public sealed class ThumbnailTests
     }
 
     [Fact]
-    public async Task WhenRequestedWidthIsCachedThenExistingVariantIsReused()
+    public async Task WhenRequestedSizeIsCachedThenExistingVariantIsReused()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var directory = Path.Combine(Path.GetTempPath(), $"Garou-thumbs-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         var sourcePath = "photo.jpg";
         var requestedPath = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 200));
-        var otherWidthPath = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 320));
+        var otherSizePath = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 320));
         await File.WriteAllBytesAsync(requestedPath, [1], cancellationToken);
-        await File.WriteAllBytesAsync(otherWidthPath, [1], cancellationToken);
+        await File.WriteAllBytesAsync(otherSizePath, [1], cancellationToken);
         var repository = new FakeCacheRepository();
         var generator = new ThumbnailGeneratorService(
             new FfmpegRunner(Path.Combine(Path.GetTempPath(), $"missing-ffmpeg-{Guid.NewGuid():N}"), TimeSpan.FromSeconds(5)),
@@ -75,7 +85,7 @@ public sealed class ThumbnailTests
                 cancellationToken);
 
             Assert.Equal(requestedPath, result);
-            Assert.True(File.Exists(otherWidthPath));
+            Assert.True(File.Exists(otherSizePath));
             Assert.Single(repository.Upserted);
         }
         finally
@@ -85,7 +95,7 @@ public sealed class ThumbnailTests
     }
 
     [Fact]
-    public async Task WhenMediaCacheIsClearedThenAllThumbnailWidthsAreRemoved()
+    public async Task WhenMediaCacheIsClearedThenAllThumbnailSizesAreRemoved()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var directory = Path.Combine(Path.GetTempPath(), $"Garou-thumbs-{Guid.NewGuid():N}");

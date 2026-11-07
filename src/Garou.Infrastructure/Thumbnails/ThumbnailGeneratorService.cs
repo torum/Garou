@@ -12,23 +12,23 @@ public sealed class ThumbnailGeneratorService(
     string thumbnailDirectory,
     TimeProvider timeProvider) : IThumbnailGeneratorService
 {
-    private const int ThumbnailWidth = 320;
+    private const int ThumbnailSize = 320;
 
     public async Task<string?> GenerateAsync(MediaFile mediaFile, CancellationToken cancellationToken)
     {
-        return await GenerateAsync(mediaFile, ThumbnailWidth, cancellationToken).ConfigureAwait(false);
+        return await GenerateAsync(mediaFile, ThumbnailSize, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<string?> GenerateAsync(MediaFile mediaFile, int thumbnailWidth, CancellationToken cancellationToken)
+    public async Task<string?> GenerateAsync(MediaFile mediaFile, int thumbnailSize, CancellationToken cancellationToken)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(thumbnailWidth);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(thumbnailSize);
 
         if (mediaFile.MediaType is not (MediaType.Image or MediaType.Video))
         {
             return null;
         }
 
-        var thumbnailPath = Path.Combine(thumbnailDirectory, ThumbnailFileName(mediaFile.Path, thumbnailWidth));
+        var thumbnailPath = Path.Combine(thumbnailDirectory, ThumbnailFileName(mediaFile.Path, thumbnailSize));
         if (File.Exists(thumbnailPath))
         {
             await RegisterThumbnailAsync(thumbnailPath, cancellationToken).ConfigureAwait(false);
@@ -37,7 +37,7 @@ public sealed class ThumbnailGeneratorService(
 
         Directory.CreateDirectory(thumbnailDirectory);
 
-        var arguments = BuildArguments(mediaFile, thumbnailPath, thumbnailWidth);
+        var arguments = BuildArguments(mediaFile, thumbnailPath, thumbnailSize);
         var succeeded = await ffmpeg.RunAsync(arguments, cancellationToken).ConfigureAwait(false);
         if (!succeeded || !File.Exists(thumbnailPath))
         {
@@ -104,12 +104,12 @@ public sealed class ThumbnailGeneratorService(
 
     internal static string ThumbnailFileName(string fullFilePath)
     {
-        return ThumbnailFileName(fullFilePath, ThumbnailWidth);
+        return ThumbnailFileName(fullFilePath, ThumbnailSize);
     }
 
-    internal static string ThumbnailFileName(string fullFilePath, int thumbnailWidth)
+    internal static string ThumbnailFileName(string fullFilePath, int thumbnailSize)
     {
-        return $"{ThumbnailFilePrefix(fullFilePath)}{thumbnailWidth}.jpg";
+        return $"{ThumbnailFilePrefix(fullFilePath)}{thumbnailSize}.jpg";
     }
 
     private static string ThumbnailFilePrefix(string fullFilePath)
@@ -120,20 +120,17 @@ public sealed class ThumbnailGeneratorService(
 
     internal static IReadOnlyList<string> BuildArguments(MediaFile mediaFile, string thumbnailPath)
     {
-        return BuildArguments(mediaFile, thumbnailPath, ThumbnailWidth);
+        return BuildArguments(mediaFile, thumbnailPath, ThumbnailSize);
     }
 
-    internal static IReadOnlyList<string> BuildArguments(MediaFile mediaFile, string thumbnailPath, int thumbnailWidth)
+    internal static IReadOnlyList<string> BuildArguments(MediaFile mediaFile, string thumbnailPath, int thumbnailSize)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(thumbnailWidth);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(thumbnailSize);
         var arguments = new List<string> { "-y" };
 
         if (mediaFile.MediaType == MediaType.Video)
         {
-            var seekSeconds = mediaFile.DurationSeconds is > 0
-                ? mediaFile.DurationSeconds.Value * 0.1
-                : 1.0;
-            arguments.AddRange(["-ss", seekSeconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)]);
+            arguments.AddRange(["-ss", "3"]);
         }
 
         arguments.AddRange(["-i", mediaFile.Path]);
@@ -143,7 +140,7 @@ public sealed class ThumbnailGeneratorService(
             arguments.AddRange(["-frames:v", "1"]);
         }
 
-        arguments.AddRange(["-vf", $"scale={thumbnailWidth}:{thumbnailWidth}:force_original_aspect_ratio=decrease:flags=lanczos", "-q:v", "2", thumbnailPath]);
+        arguments.AddRange(["-vf", $"scale={thumbnailSize}:{thumbnailSize}:force_original_aspect_ratio=decrease:flags=lanczos", "-q:v", "2", thumbnailPath]);
         return arguments;
     }
 }

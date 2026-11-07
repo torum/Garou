@@ -2,6 +2,7 @@ using Garou.Domain.Abstractions;
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
 using Garou.Domain.Models;
+using Garou.Infrastructure.Settings;
 using Garou.Infrastructure.Sync;
 
 namespace Garou.Tests.Sync;
@@ -14,7 +15,6 @@ public sealed class SyncTests
         var repository = new FakeMediaFileRepository();
         var library = new LibraryDefinition
         {
-            Id = "lib",
             RootPath = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}")
         };
 
@@ -35,7 +35,7 @@ public sealed class SyncTests
         await File.WriteAllBytesAsync(Path.Combine(root, "nested", "clip.mp4"), [1, 2, 3], cancellationToken);
         await File.WriteAllTextAsync(Path.Combine(root, "notes.txt"), "not media", cancellationToken);
         var repository = new FakeMediaFileRepository();
-        var library = new LibraryDefinition { Id = "lib", RootPath = root };
+        var library = new LibraryDefinition { RootPath = root };
 
         try
         {
@@ -43,8 +43,120 @@ public sealed class SyncTests
 
             Assert.Equal(2, repository.Upserted.Count);
             Assert.DoesNotContain(repository.Upserted, file => file.FileName == "notes.txt");
+            Assert.All(repository.Upserted, file => Assert.NotEqual(Guid.Empty, file.Id));
             Assert.All(repository.Upserted, file => Assert.Null(file.ThumbnailPath));
             Assert.True(library.IsOnline);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenFlvFileIsScannedThenItIsIndexedAsVideo()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"flv-scan-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        await File.WriteAllBytesAsync(Path.Combine(root, "clip.flv"), [1, 2, 3], cancellationToken);
+        var repository = new FakeMediaFileRepository();
+
+        try
+        {
+            await CreateScanService(repository).ScanAsync(new LibraryDefinition { RootPath = root }, null, cancellationToken);
+
+            Assert.Equal(MediaType.Video, Assert.Single(repository.Upserted).MediaType);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenSubfolderScanningIsDisabledThenNestedFilesAreRemovedFromTheIndex()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"no-subfolder-scan-{Guid.NewGuid():N}");
+        var nested = Path.Combine(root, "nested");
+        Directory.CreateDirectory(nested);
+        var rootFile = Path.Combine(root, "root.jpg");
+        var nestedFile = Path.Combine(nested, "nested.jpg");
+        await File.WriteAllBytesAsync(rootFile, [1, 2, 3], cancellationToken);
+        await File.WriteAllBytesAsync(nestedFile, [1, 2, 3], cancellationToken);
+        var repository = new FakeMediaFileRepository();
+        repository.StoredPaths.Add(nestedFile);
+        var settingsSession = new AppSettingsSession();
+        settingsSession.Initialize(new AppSettings { ScanSubfolders = false });
+
+        try
+        {
+            await CreateScanService(repository, settingsSession: settingsSession)
+                .ScanAsync(new LibraryDefinition { RootPath = root }, null, cancellationToken);
+
+            Assert.Equal(rootFile, Assert.Single(repository.Upserted).Path);
+            Assert.Equal([nestedFile], repository.DeletedPaths);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenExtensionAllowListIsConfiguredThenOnlyIncludedExtensionsRemainIndexed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"extension-filter-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var includedPath = Path.Combine(root, "clip.mp4");
+        var excludedPath = Path.Combine(root, "photo.jpg");
+        await File.WriteAllBytesAsync(includedPath, [1, 2, 3], cancellationToken);
+        await File.WriteAllBytesAsync(excludedPath, [1, 2, 3], cancellationToken);
+        var repository = new FakeMediaFileRepository();
+        repository.StoredPaths.Add(excludedPath);
+        var settingsSession = CreateSettingsSession(".mp4");
+
+        try
+        {
+            await CreateScanService(repository, settingsSession: settingsSession)
+                .ScanAsync(new LibraryDefinition { RootPath = root }, null, cancellationToken);
+
+            Assert.Equal(includedPath, Assert.Single(repository.Upserted).Path);
+            Assert.Equal([excludedPath], repository.DeletedPaths);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenSubfolderScanningIsDisabledThenNestedWatcherFilesAreNotIndexed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"watcher-no-subfolder-scan-{Guid.NewGuid():N}");
+        var nested = Path.Combine(root, "nested");
+        Directory.CreateDirectory(nested);
+        var nestedFile = Path.Combine(nested, "clip.mp4");
+        await File.WriteAllBytesAsync(nestedFile, [1, 2, 3], cancellationToken);
+        var repository = new FakeMediaFileRepository();
+        var library = new LibraryDefinition { RootPath = root, IsEnabled = true };
+        var settingsSession = new AppSettingsSession();
+        settingsSession.Initialize(new AppSettings { ScanSubfolders = false });
+        using var stop = new CancellationTokenSource();
+        var watcher = new ScriptedWatcher(
+            () => { },
+            [new FileChangeEvent { LibraryRoot = root, FullPath = nestedFile, Kind = FileChangeKind.Created }],
+            stop);
+
+        try
+        {
+            await CreateService(repository, watcher, library, settingsSession).RunAsync(stop.Token);
+
+            Assert.Empty(repository.Upserted);
+            Assert.Equal([nestedFile], repository.DeletedPaths);
         }
         finally
         {
@@ -63,9 +175,38 @@ public sealed class SyncTests
         try
         {
             await CreateScanService(new FakeMediaFileRepository(), folders)
-                .ScanAsync(new LibraryDefinition { Id = "lib", RootPath = root }, null, cancellationToken);
+                .ScanAsync(new LibraryDefinition { RootPath = root }, null, cancellationToken);
 
             Assert.Equal(root, Assert.Single(await folders.GetAllAsync(cancellationToken)).Path);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenWatcherReportsExcludedExtensionThenFileIsNotIndexed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"watcher-extension-filter-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var excludedPath = Path.Combine(root, "notes.txt");
+        await File.WriteAllTextAsync(excludedPath, "not media", cancellationToken);
+        var repository = new FakeMediaFileRepository();
+        var library = new LibraryDefinition { RootPath = root, IsEnabled = true };
+        using var stop = new CancellationTokenSource();
+        var watcher = new ScriptedWatcher(
+            () => { },
+            [new FileChangeEvent { LibraryRoot = root, FullPath = excludedPath, Kind = FileChangeKind.Created }],
+            stop);
+
+        try
+        {
+            await CreateService(repository, watcher, library, CreateSettingsSession(".jpg")).RunAsync(stop.Token);
+
+            Assert.Empty(repository.Upserted);
+            Assert.Equal([excludedPath], repository.DeletedPaths);
         }
         finally
         {
@@ -84,7 +225,7 @@ public sealed class SyncTests
 
         try
         {
-            await CreateScanService(repository).ScanAsync(new LibraryDefinition { Id = "lib", RootPath = root }, null, cancellationToken);
+            await CreateScanService(repository).ScanAsync(new LibraryDefinition { RootPath = root }, null, cancellationToken);
 
             Assert.Equal(MediaType.Audio, Assert.Single(repository.Upserted).MediaType);
         }
@@ -111,7 +252,7 @@ public sealed class SyncTests
             }
 
             await CreateScanService(repository).ScanAsync(
-                new LibraryDefinition { Id = "lib", RootPath = root },
+                new LibraryDefinition { RootPath = root },
                 progress,
                 cancellationToken);
 
@@ -135,7 +276,7 @@ public sealed class SyncTests
 
         try
         {
-            await CreateScanService(repository).ScanAsync(new LibraryDefinition { Id = "lib", RootPath = root }, null, CancellationToken.None);
+            await CreateScanService(repository).ScanAsync(new LibraryDefinition { RootPath = root }, null, CancellationToken.None);
 
             Assert.Equal(0, repository.DeleteCount);
         }
@@ -156,7 +297,7 @@ public sealed class SyncTests
 
         try
         {
-            await CreateScanService(repository).ScanAsync(new LibraryDefinition { Id = "lib", RootPath = root }, null, CancellationToken.None);
+            await CreateScanService(repository).ScanAsync(new LibraryDefinition { RootPath = root }, null, CancellationToken.None);
 
             Assert.Single(repository.Upserted);
             Assert.Equal("photo.jpg", repository.Upserted[0].FileName);
@@ -181,7 +322,7 @@ public sealed class SyncTests
 
         try
         {
-            await CreateScanService(repository).ScanAsync(new LibraryDefinition { Id = "lib", RootPath = root }, null, CancellationToken.None);
+            await CreateScanService(repository).ScanAsync(new LibraryDefinition { RootPath = root }, null, CancellationToken.None);
 
             Assert.Equal([stalePath], repository.DeletedPaths);
         }
@@ -201,7 +342,7 @@ public sealed class SyncTests
         var oldPath = Path.Combine(root, "original.jpg");
         await File.WriteAllBytesAsync(newPath, [1, 2, 3], cancellationToken);
         var repository = new FakeMediaFileRepository();
-        var library = new LibraryDefinition { Id = "lib", RootPath = root, IsEnabled = true };
+        var library = new LibraryDefinition { RootPath = root, IsEnabled = true };
         using var stop = new CancellationTokenSource();
         var watcher = new ScriptedWatcher(
             () => { },
@@ -228,7 +369,7 @@ public sealed class SyncTests
         Directory.CreateDirectory(root);
         var latePath = Path.Combine(root, "late.jpg");
         var repository = new FakeMediaFileRepository();
-        var library = new LibraryDefinition { Id = "lib", RootPath = root, IsEnabled = true };
+        var library = new LibraryDefinition { RootPath = root, IsEnabled = true };
         using var stop = new CancellationTokenSource();
         var watcher = new ScriptedWatcher(
             () => File.WriteAllBytes(latePath, [1, 2, 3]),
@@ -248,33 +389,47 @@ public sealed class SyncTests
         }
     }
 
-    private static MediaIndexerService CreateService(FakeMediaFileRepository repository, IFileWatcherService watcher, LibraryDefinition library)
+    private static MediaIndexerService CreateService(
+        FakeMediaFileRepository repository,
+        IFileWatcherService watcher,
+        LibraryDefinition library,
+        AppSettingsSession? settingsSession = null)
     {
         return new MediaIndexerService(
             watcher,
             new ScriptedLibraryRepository(library),
-            new NoopMetadata(),
             repository,
             new FakeFolderRepository(),
+            settingsSession ?? new AppSettingsSession(),
             TimeProvider.System);
     }
 
-    private static MediaIndexerService CreateScanService(FakeMediaFileRepository repository, FakeFolderRepository? folders = null)
+    private static MediaIndexerService CreateScanService(
+        FakeMediaFileRepository repository,
+        FakeFolderRepository? folders = null,
+        AppSettingsSession? settingsSession = null)
     {
         return new MediaIndexerService(
             new NoopWatcher(),
             new EmptyLibraryRepository(),
-            new NoopMetadata(),
             repository,
             folders ?? new FakeFolderRepository(),
+            settingsSession ?? new AppSettingsSession(),
             TimeProvider.System);
+    }
+
+    private static AppSettingsSession CreateSettingsSession(params string[] includedExtensions)
+    {
+        var settingsSession = new AppSettingsSession();
+        settingsSession.Initialize(new AppSettings { IncludedExtensions = [.. includedExtensions] });
+        return settingsSession;
     }
 
     private sealed class FakeFolderRepository : IFolderRepository
     {
         private readonly List<Folder> _folders = [];
 
-        public Task<Folder?> GetByIdAsync(long id, CancellationToken cancellationToken) =>
+        public Task<Folder?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(_folders.FirstOrDefault(folder => folder.Id == id));
 
         public Task<Folder?> GetByPathAsync(string path, CancellationToken cancellationToken) =>
@@ -283,14 +438,14 @@ public sealed class SyncTests
         public Task<IReadOnlyList<Folder>> GetAllAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<Folder>>(_folders.ToList());
 
-        public Task<long> AddAsync(Folder folder, CancellationToken cancellationToken)
+        public Task<Guid> AddAsync(Folder folder, CancellationToken cancellationToken)
         {
-            var id = _folders.Count + 1L;
+            var id = Guid.CreateVersion7();
             _folders.Add(new Folder { Id = id, Path = folder.Path, ParentId = folder.ParentId });
             return Task.FromResult(id);
         }
 
-        public Task DeleteSubtreeAsync(long folderId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task DeleteSubtreeAsync(Guid folderId, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class EmptyLibraryRepository : ILibraryRepository
@@ -300,9 +455,9 @@ public sealed class SyncTests
 
         public Task AddAsync(LibraryDefinition library, CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task RemoveAsync(string id, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RemoveAsync(Guid id, CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task SetEnabledAsync(string id, bool isEnabled, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SetEnabledAsync(Guid id, bool isEnabled, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class ScriptedLibraryRepository(LibraryDefinition library) : ILibraryRepository
@@ -312,9 +467,9 @@ public sealed class SyncTests
 
         public Task AddAsync(LibraryDefinition library, CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task RemoveAsync(string id, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RemoveAsync(Guid id, CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task SetEnabledAsync(string id, bool isEnabled, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SetEnabledAsync(Guid id, bool isEnabled, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class ScriptedWatcher(Action beforeEmit, IReadOnlyList<FileChangeEvent> changes, CancellationTokenSource stop) : IFileWatcherService
@@ -339,12 +494,6 @@ public sealed class SyncTests
             await Task.CompletedTask;
             yield break;
         }
-    }
-
-    private sealed class NoopMetadata : IMetadataExtractionService
-    {
-        public Task<MediaMetadata> ExtractAsync(string filePath, CancellationToken cancellationToken) =>
-            Task.FromResult(new MediaMetadata());
     }
 
     private sealed class RecordingProgress : IProgress<ScanProgress>
@@ -372,11 +521,11 @@ public sealed class SyncTests
 
         public List<string> DeletedPaths { get; } = [];
 
-        public Task<MediaFile?> GetByIdAsync(long id, CancellationToken cancellationToken) => Task.FromResult<MediaFile?>(null);
+        public Task<MediaFile?> GetByIdAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<MediaFile?>(null);
 
         public Task<MediaFile?> GetByPathAsync(string path, CancellationToken cancellationToken) => Task.FromResult<MediaFile?>(null);
 
-        public Task<IReadOnlyList<MediaFile>> GetPageAsync(long? folderId, long afterId, int pageSize, CancellationToken cancellationToken) =>
+        public Task<IReadOnlyList<MediaFile>> GetPageAsync(Guid? folderId, Guid afterId, int pageSize, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<MediaFile>>([]);
 
         public Task UpsertBatchAsync(IReadOnlyList<MediaFile> mediaFiles, CancellationToken cancellationToken)
@@ -390,7 +539,7 @@ public sealed class SyncTests
             return Task.CompletedTask;
         }
 
-        public Task UpdateThumbnailPathAsync(long mediaFileId, string? thumbnailPath, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task UpdateThumbnailPathAsync(Guid mediaFileId, string? thumbnailPath, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task DeleteByPathAsync(string path, CancellationToken cancellationToken)
         {

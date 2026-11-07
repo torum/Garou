@@ -8,21 +8,22 @@ public sealed class TagRepository(SqliteConnectionFactory connectionFactory) : I
     public async Task<Tag?> GetByNameAsync(string name, CancellationToken cancellationToken) =>
         await connectionFactory.QuerySingleAsync(
             "SELECT Id, Name FROM Tag WHERE Name = $name;",
-            reader => new Tag { Id = reader.GetInt64(0), Name = reader.GetString(1) },
+            reader => new Tag { Id = Guid.Parse(reader.GetString(0)), Name = reader.GetString(1) },
             cancellationToken,
             ("$name", name));
 
-    public async Task<long> AddAsync(Tag tag, CancellationToken cancellationToken)
+    public async Task<Guid> AddAsync(Tag tag, CancellationToken cancellationToken)
     {
-        var result = await connectionFactory.ExecuteScalarAsync(
+        var id = tag.Id == Guid.Empty ? Guid.CreateVersion7() : tag.Id;
+        await connectionFactory.ExecuteNonQueryAsync(
             """
-            INSERT INTO Tag (Name)
-            VALUES ($name);
-            SELECT last_insert_rowid();
+            INSERT INTO Tag (Id, Name)
+            VALUES ($id, $name);
             """,
             cancellationToken,
+            ("$id", id.ToString("N")),
             ("$name", tag.Name));
-        return (long)result!;
+        return id;
     }
 
     public async Task AssignAsync(MediaFileTag mediaFileTag, CancellationToken cancellationToken)
@@ -33,8 +34,8 @@ public sealed class TagRepository(SqliteConnectionFactory connectionFactory) : I
             VALUES ($mediaFileId, $tagId);
             """,
             cancellationToken,
-            ("$mediaFileId", mediaFileTag.MediaFileId),
-            ("$tagId", mediaFileTag.TagId));
+            ("$mediaFileId", mediaFileTag.MediaFileId.ToString("N")),
+            ("$tagId", mediaFileTag.TagId.ToString("N")));
     }
 
     public async Task RemoveAssignmentAsync(MediaFileTag mediaFileTag, CancellationToken cancellationToken)
@@ -45,7 +46,7 @@ public sealed class TagRepository(SqliteConnectionFactory connectionFactory) : I
             WHERE MediaFileId = $mediaFileId AND TagId = $tagId;
             """,
             cancellationToken,
-            ("$mediaFileId", mediaFileTag.MediaFileId),
-            ("$tagId", mediaFileTag.TagId));
+            ("$mediaFileId", mediaFileTag.MediaFileId.ToString("N")),
+            ("$tagId", mediaFileTag.TagId.ToString("N")));
     }
 }
