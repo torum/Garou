@@ -85,74 +85,74 @@
 
         <GridSplitter x:Name="LeftPaneGridSplitter" Grid.Row="0" Grid.Column="1" ResizeDirection="Columns" Width="5" />
 
-        <SplitView Grid.Row="0" Grid.Column="2" IsPaneOpen="{Binding IsDetailsPaneOpen}" DisplayMode="Inline" PanePlacement="Right" OpenPaneLength="280">
-            <SplitView.Pane>
+        <Grid x:Name="MediaDetailsGrid" Grid.Row="0" Grid.Column="2" ColumnDefinitions="*,Auto,280">
+            <Border Grid.Column="2" IsVisible="{Binding IsDetailsPaneOpen}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="16" Spacing="8" DataContext="{Binding SelectedItem}" x:DataType="vm:MediaItemViewModel">
-                        <TextBlock Text="{Binding FileName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding File.Path}" Opacity="0.75" TextWrapping="Wrap" />
+                        <SelectableTextBlock Text="{Binding FileName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <SelectableTextBlock Text="{Binding File.Path}" Opacity="0.75" TextWrapping="Wrap" />
                         <Separator Margin="0,8" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="ID" Width="96" Opacity="0.65" />
-                            <TextBlock Text="{Binding IdText}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Type" Width="96" Opacity="0.65" />
-                            <TextBlock Text="{Binding MediaTypeText}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Extension" Width="96" Opacity="0.65" />
-                            <TextBlock Text="{Binding ExtensionText}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Size" Width="96" Opacity="0.65" />
-                            <TextBlock Text="{Binding FileSizeText}" TextWrapping="Wrap" />
-                        </StackPanel>
+                        <Grid ColumnDefinitions="96,8,*">
+                            <SelectableTextBlock Text="ID" Opacity="0.65" />
+                            <SelectableTextBlock Grid.Column="2" Text="{Binding IdText}" TextWrapping="Wrap" />
+                        </Grid>
+                        <Grid ColumnDefinitions="96,8,*">
+                            <SelectableTextBlock Text="Type" Opacity="0.65" />
+                            <SelectableTextBlock Grid.Column="2" Text="{Binding MediaTypeText}" TextWrapping="Wrap" />
+                        </Grid>
+                        <Grid ColumnDefinitions="96,8,*">
+                            <SelectableTextBlock Text="Extension" Opacity="0.65" />
+                            <SelectableTextBlock Grid.Column="2" Text="{Binding ExtensionText}" TextWrapping="Wrap" />
+                        </Grid>
+                        <Grid ColumnDefinitions="96,8,*">
+                            <SelectableTextBlock Text="Size" Opacity="0.65" />
+                            <SelectableTextBlock Grid.Column="2" Text="{Binding FileSizeText}" TextWrapping="Wrap" />
+                        </Grid>
                         <StackPanel Spacing="8" IsVisible="{Binding ShowsDetailedMetadata}">
                             <Separator Margin="0,8" />
-                            <TextBlock Text="Media metadata" FontWeight="SemiBold" />
+                            <SelectableTextBlock Text="Media metadata" FontWeight="SemiBold" />
                             <ItemsControl ItemsSource="{Binding DetailedTags}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="metadata:MediaMetadataTag">
                                         <StackPanel Spacing="2" Margin="0,0,0,6">
-                                            <TextBlock Text="{Binding Category}" FontSize="11" Opacity="0.65" />
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                            <TextBlock Text="{Binding Value}" TextWrapping="Wrap" />
+                                            <SelectableTextBlock Text="{Binding Category}" FontSize="11" Opacity="0.65" />
+                                            <SelectableTextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <SelectableTextBlock Text="{Binding Value}" TextWrapping="Wrap" />
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Hash" Width="96" Opacity="0.65" />
-                            <TextBlock Text="{Binding HashText}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Created" Width="96" Opacity="0.65" />
-                            <TextBlock Text="{Binding CreatedDateText}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Modified" Width="96" Opacity="0.65" />
-                            <TextBlock Text="{Binding ModifiedDateText}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Indexed" Width="96" Opacity="0.65" />
-                            <TextBlock Text="{Binding LastIndexedDateText}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Folder ID" Width="96" Opacity="0.65" />
-                            <TextBlock Text="{Binding FolderIdText}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Thumbnail" Width="96" Opacity="0.65" />
-                            <TextBlock Text="{Binding ThumbnailPathText}" TextWrapping="Wrap" />
-                        </StackPanel>
+                        <Grid ColumnDefinitions="96,8,*">
+                            <SelectableTextBlock Text="Hash" Opacity="0.65" />
+                            <SelectableTextBlock Grid.Column="2" Text="{Binding HashText}" TextWrapping="Wrap" />
+                        </Grid>
+                        <Grid ColumnDefinitions="96,8,*">
+                            <SelectableTextBlock Text="Created" Opacity="0.65" />
+                            <SelectableTextBlock Grid.Column="2" Text="{Binding CreatedDateText}" TextWrapping="Wrap" />
+                        </Grid>
+                        <Grid ColumnDefinitions="96,8,*">
+                            <SelectableTextBlock Text="Modified" Opacity="0.65" />
+                            <SelectableTextBlock Grid.Column="2" Text="{Binding ModifiedDateText}" TextWrapping="Wrap" />
+                        </Grid>
+                        <Grid ColumnDefinitions="96,8,*">
+                            <SelectableTextBlock Text="Indexed" Opacity="0.65" />
+                            <SelectableTextBlock Grid.Column="2" Text="{Binding LastIndexedDateText}" TextWrapping="Wrap" />
+                        </Grid>
+                        <Grid ColumnDefinitions="96,8,*">
+                            <SelectableTextBlock Text="Folder ID" Opacity="0.65" />
+                            <SelectableTextBlock Grid.Column="2" Text="{Binding FolderIdText}" TextWrapping="Wrap" />
+                        </Grid>
+                        <Grid ColumnDefinitions="96,8,*">
+                            <SelectableTextBlock Text="Thumbnail" Opacity="0.65" />
+                            <SelectableTextBlock Grid.Column="2" Text="{Binding ThumbnailPathText}" TextWrapping="Wrap" />
+                        </Grid>
                     </StackPanel>
                 </ScrollViewer>
-            </SplitView.Pane>
-            <SplitView.Content>
+            </Border>
+            <GridSplitter x:Name="DetailsPaneGridSplitter" Grid.Column="1" ResizeDirection="Columns" Width="5" IsVisible="{Binding IsDetailsPaneOpen}" />
                 <!-- Keep SelectionChanged wired for generalized on-demand metadata loading -->
-                <ListBox x:Name="MediaListBox" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" SelectionChanged="OnMediaSelectionChanged" Margin="0,0,0,0" Padding="0,8,0,0" DoubleTapped="OnMediaDoubleTapped" Theme="{DynamicResource {x:Type ListBox}}"
+                <ListBox Grid.Column="0" x:Name="MediaListBox" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" SelectionChanged="OnMediaSelectionChanged" Margin="0,0,0,0" Padding="0,8,0,0" DoubleTapped="OnMediaDoubleTapped" Theme="{DynamicResource {x:Type ListBox}}"
                          Classes.hide-names="{Binding !ShowFileNames}"
                          Classes.hide-badges="{Binding !ShowFileTypeBadges}">
                     <ListBox.Styles>
@@ -300,8 +300,7 @@
                         </ControlTheme>
                     </ListBox.Resources>
                 </ListBox>
-            </SplitView.Content>
-        </SplitView>
+        </Grid>
 
         <Border Grid.Row="1" Grid.ColumnSpan="3" Margin="12,10,12,6" Padding="8" CornerRadius="12" BorderThickness="1" BorderBrush="#33000000">
             <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">

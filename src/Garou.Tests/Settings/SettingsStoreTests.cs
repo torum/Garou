@@ -125,6 +125,17 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task WhenDetailsPaneWidthIsSavedThenItIsRestored()
+    {
+        var store = new SettingsStore(_settingsPath);
+        await store.SaveAsync(new AppSettings { DetailsPaneWidth = 412.5 }, CancellationToken.None);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(412.5, loaded.DetailsPaneWidth);
+    }
+
+    [Fact]
     public async Task WhenWindowPlacementIsSavedThenItIsRestored()
     {
         var store = new SettingsStore(_settingsPath);

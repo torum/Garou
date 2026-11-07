@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
@@ -27,6 +28,7 @@ public partial class MainWindow : Window
     private VirtualizingUniformPanel? _mediaPanel;
     private double _normalWidth;
     private double _normalHeight;
+    private double _detailsPaneWidth = 280;
     private PixelPoint _normalPosition;
     private bool _wasMaximized;
 
@@ -39,6 +41,7 @@ public partial class MainWindow : Window
 
         MediaListBox.AddHandler(InputElement.KeyDownEvent, OnMediaListKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         LeftPaneGridSplitter.AddHandler(InputElement.PointerReleasedEvent, OnGridSplitterPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
+        DetailsPaneGridSplitter.AddHandler(InputElement.PointerReleasedEvent, OnDetailsPaneGridSplitterPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
         MediaListBox.AddHandler(ScrollViewer.ScrollChangedEvent, OnMediaListScrollChanged);
         Loaded += OnLoaded;
         ScalingChanged += OnScalingChanged;
@@ -64,6 +67,9 @@ public partial class MainWindow : Window
 
         if (DataContext is MainViewModel viewModel)
         {
+            _detailsPaneWidth = Math.Clamp(_settingsSession.Current.DetailsPaneWidth, 180, 600);
+            ApplyDetailsPaneVisibility(viewModel.IsDetailsPaneOpen);
+            viewModel.PropertyChanged += OnMainViewModelPropertyChanged;
             viewModel.OnRenderScalingChanged(TopLevel.GetTopLevel(this)?.RenderScaling ?? 1);
         }
 
@@ -130,11 +136,13 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainViewModel disposableViewModel)
         {
+            disposableViewModel.PropertyChanged -= OnMainViewModelPropertyChanged;
             disposableViewModel.Dispose();
         }
 
         CacheNormalBounds();
         var settings = _settingsSession.Current;
+        settings.DetailsPaneWidth = _detailsPaneWidth;
         if (_normalWidth >= MinWidth && _normalHeight >= MinHeight)
         {
             settings.WindowWidth = _normalWidth;
@@ -477,6 +485,30 @@ public partial class MainWindow : Window
         {
             viewModel.LeftPaneWidth = Math.Clamp(MainLayoutGrid.ColumnDefinitions[0].ActualWidth, 180, 500);
         }
+    }
+
+    private void OnDetailsPaneGridSplitterPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        var detailsPaneColumn = MediaDetailsGrid.ColumnDefinitions[2];
+        if (detailsPaneColumn.ActualWidth >= 180)
+        {
+            _detailsPaneWidth = Math.Clamp(detailsPaneColumn.ActualWidth, 180, 600);
+            detailsPaneColumn.Width = new GridLength(_detailsPaneWidth);
+            _settingsSession.Current.DetailsPaneWidth = _detailsPaneWidth;
+        }
+    }
+
+    private void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsDetailsPaneOpen) && sender is MainViewModel viewModel)
+        {
+            ApplyDetailsPaneVisibility(viewModel.IsDetailsPaneOpen);
+        }
+    }
+
+    private void ApplyDetailsPaneVisibility(bool isOpen)
+    {
+        MediaDetailsGrid.ColumnDefinitions[2].Width = isOpen ? new GridLength(_detailsPaneWidth) : new GridLength(0);
     }
 
     private void OnFolderRestored(FolderNode? node)

@@ -18,6 +18,8 @@ public sealed class AppSettings
 
     public double LeftPaneWidth { get; set; } = 260;
 
+    public double DetailsPaneWidth { get; set; } = 280;
+
     public bool ShowFileNames { get; set; } = true;
 
     public bool ShowFileTypeBadges { get; set; } = true;

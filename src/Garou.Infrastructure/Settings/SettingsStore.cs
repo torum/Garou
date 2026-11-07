@@ -59,6 +59,9 @@ public sealed class SettingsStore(string settingsFilePath)
                 LeftPaneWidth = double.TryParse(root?.Element("LeftPaneWidth")?.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var leftPaneWidth)
                     ? Math.Clamp(leftPaneWidth, 180, 500)
                     : new AppSettings().LeftPaneWidth,
+                DetailsPaneWidth = double.TryParse(root?.Element("DetailsPaneWidth")?.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var detailsPaneWidth)
+                    ? Math.Clamp(detailsPaneWidth, 180, 600)
+                    : new AppSettings().DetailsPaneWidth,
                 ShowFileNames = bool.TryParse(root?.Element("ShowFileNames")?.Value, out var showFileNames)
                     ? showFileNames
                     : new AppSettings().ShowFileNames,
@@ -121,6 +124,7 @@ public sealed class SettingsStore(string settingsFilePath)
                     new XElement("IsDetailsPaneOpen", settings.IsDetailsPaneOpen.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ThumbnailSize", settings.ThumbnailSize.ToString(CultureInfo.InvariantCulture)),
                     new XElement("LeftPaneWidth", settings.LeftPaneWidth.ToString(CultureInfo.InvariantCulture)),
+                    new XElement("DetailsPaneWidth", settings.DetailsPaneWidth.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ShowFileNames", settings.ShowFileNames.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ShowFileTypeBadges", settings.ShowFileTypeBadges.ToString(CultureInfo.InvariantCulture)),
                     new XElement("IncludeDescendants", settings.IncludeDescendants.ToString(CultureInfo.InvariantCulture)),
