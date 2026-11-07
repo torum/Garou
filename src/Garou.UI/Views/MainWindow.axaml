@@ -8,6 +8,8 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="650"
+        xmlns:imaging="clr-namespace:Avalonia.Media.Imaging;assembly=Avalonia.Base"
+		xmlns:ia="using:Xaml.Behaviors.Interactions.Animated"
         x:Class="Garou.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
@@ -149,30 +151,30 @@
                                 <StackPanel Spacing="4">
                                     <Grid Width="{Binding $parent[ListBox].DataContext.ThumbnailSize}" Height="{Binding $parent[ListBox].DataContext.ThumbnailSize}">
                                         <Border CornerRadius="8" Effect="{StaticResource ThumbnailImageShadow}"> <!-- Effect costs a lot.  -->
-                                        <Border x:Name="ClipBorder" CornerRadius="8" ClipToBounds="True" Background="Transparent">
-                                            <Border.Transitions>
-                                                <Transitions>
-                                                    <TransformOperationsTransition Property="RenderTransform" Duration="0:00:00.200" />
-                                                </Transitions>
-                                            </Border.Transitions>
+                                            <Border x:Name="ClipBorder" CornerRadius="8" ClipToBounds="True" Background="Transparent">
+                                                <Border.Transitions>
+                                                    <Transitions>
+                                                        <TransformOperationsTransition Property="RenderTransform" Duration="0:00:00.200" />
+                                                    </Transitions>
+                                                </Border.Transitions>
 
-                                            <TransitioningContentControl Content="{Binding Thumbnail.Bitmap, Mode=OneWay}">
-                                                <TransitioningContentControl.ContentTemplate>
-                                                    <DataTemplate DataType="Bitmap">
-                                                        <Image x:Name="ThumbnailImage" Margin="0" Source="{Binding}" Stretch="Uniform" VerticalAlignment="Center">
-                                                            <Image.Clip>
-                                                                <RectangleGeometry Rect="{Binding Bounds, ElementName=ThumbnailImage, Converter={StaticResource BoundsToLocalRectConverter}}" RadiusX="8" RadiusY="8" />
-                                                            </Image.Clip>
-                                                        </Image>
-                                                    </DataTemplate>
-                                                </TransitioningContentControl.ContentTemplate>
-                                                <TransitioningContentControl.PageTransition>
-                                                    <CrossFade Duration="0:00:00.150" />
-                                                </TransitioningContentControl.PageTransition>
-                                            </TransitioningContentControl>
+                                                <TransitioningContentControl Content="{Binding Thumbnail.Bitmap, Mode=OneWay}">
+                                                    <TransitioningContentControl.ContentTemplate>
+                                                        <DataTemplate DataType="imaging:Bitmap">
+                                                            <Image x:Name="ThumbnailImage" Margin="0" Source="{Binding}" Stretch="Uniform" VerticalAlignment="Center">
+                                                                <Image.Clip>
+                                                                    <RectangleGeometry Rect="{Binding Bounds, ElementName=ThumbnailImage, Converter={StaticResource BoundsToLocalRectConverter}}" RadiusX="8" RadiusY="8" />
+                                                                </Image.Clip>
+                                                            </Image>
+                                                        </DataTemplate>
+                                                    </TransitioningContentControl.ContentTemplate>
+                                                    <TransitioningContentControl.PageTransition>
+                                                        <CrossFade Duration="0:00:00.150" />
+                                                    </TransitioningContentControl.PageTransition>
+                                                </TransitioningContentControl>
+                                            </Border>
                                         </Border>
-                                        </Border>
-                                        <Border Classes="type-badge" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7" Padding="7,3" CornerRadius="5" Background="#CC20242A" IsVisible="{Binding $parent[ListBox].DataContext.ShowFileTypeBadges}">
+                                        <Border Classes="type-badge" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,7,7,7" Padding="7,3,7,3" CornerRadius="5" Background="#CC20242A" IsVisible="{Binding $parent[ListBox].DataContext.ShowFileTypeBadges}">
                                             <TextBlock Text="{Binding MediaType}" Foreground="White" FontSize="11" FontWeight="SemiBold" />
                                         </Border>
                                     </Grid>
@@ -206,7 +208,10 @@
                                             BorderBrush="{TemplateBinding BorderBrush}"
                                             BorderThickness="{TemplateBinding BorderThickness}"
                                             CornerRadius="{TemplateBinding CornerRadius}">
-                                        <vc:AnimatedScrollViewer Name="PART_ScrollViewer" Duration="0:00:00.250" ScrollMultiplier="1.5"
+                                        <!-- 
+                                        <vc:AnimatedScrollViewer Name="PART_ScrollViewer" Duration="0:00:00.250" ScrollMultiplier="1.8"
+                                        -->
+                                        <ScrollViewer Name="PART_ScrollViewer"
                                                                  VerticalSnapPointsType="{TemplateBinding (ScrollViewer.VerticalSnapPointsType)}"
                                                                  HorizontalSnapPointsType="{TemplateBinding (ScrollViewer.HorizontalSnapPointsType)}"
                                                                  HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
@@ -216,11 +221,15 @@
                                                                  IsDeferredScrollingEnabled="{TemplateBinding (ScrollViewer.IsDeferredScrollingEnabled)}"
                                                                  AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
                                                                  BringIntoViewOnFocusChange="{TemplateBinding (ScrollViewer.BringIntoViewOnFocusChange)}">
+                                            
+															<Interaction.Behaviors>
+																<ia:VerticalScrollViewerAnimatedBehavior/>
+															</Interaction.Behaviors>
 
                                             <ItemsPresenter Name="PART_ItemsPresenter"
                                                             ItemsPanel="{TemplateBinding ItemsPanel}"
                                                             Margin="{TemplateBinding Padding}"/>
-                                        </vc:AnimatedScrollViewer>
+                                        </ScrollViewer>
                                     </Border>
                                 </ControlTemplate>
                             </Setter>

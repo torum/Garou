@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using Avalonia.Media.Imaging;
 
-namespace Garou.UI.Converters;
+namespace Garou.UI.Models;
 
 public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
 {
@@ -11,7 +11,10 @@ public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
 
     public ThumbnailImage(string path)
     {
-        _ = LoadAsync(path);
+        if (!string.IsNullOrEmpty(path))
+        {
+            _ = LoadAsync(path);
+        }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

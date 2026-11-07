@@ -1,6 +1,6 @@
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
-using Garou.UI.Converters;
+using Garou.UI.Models;
 
 namespace Garou.ViewModels;
 
