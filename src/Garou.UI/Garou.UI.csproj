@@ -1,0 +1,46 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest Condition="$([MSBuild]::IsOSPlatform('Windows'))">app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <None Include="ThirdParty\ffmpeg\win-x64\**\*">
+      <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Behaviors\" />
+    <Folder Include="Models\" />
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.5" />
+	  <PackageReference Include="SkiaSharp" Version="4.154.0" />
+	  <!-- SkiaSharp.NativeAssets.Linux must match with SkiaSharp package ver -->
+	  <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.154.0" />
+	  <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="4.154.0" />
+	  <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.154.0" />
+	  <PackageReference Include="Xaml.Behaviors.Interactions" Version="12.0.7" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Garou.Application\Garou.Application.csproj" />
+    <ProjectReference Include="..\Garou.Infrastructure\Garou.Infrastructure.csproj" />
+    <ProjectReference Include="..\Garou.Localization\Garou.Localization.csproj" />
+  </ItemGroup>
+</Project>
