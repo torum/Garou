@@ -41,12 +41,21 @@ public class VirtualizingUniformPanel : VirtualizingPanel
         ItemHeightProperty.Changed.AddClassHandler<VirtualizingUniformPanel>((panel, _) => panel.InvalidateMeasure());
     }
 
+    private int _lastFirstVisibleIndex = -1;
+    private int _lastLastVisibleIndex = -1;
+    private int _lastItemCount = -1;
+
     protected override void OnItemsChanged(IReadOnlyList<object?>? items, NotifyCollectionChangedEventArgs e)
     {
         if (items is not null)
         {
             base.OnItemsChanged(items, e);
         }
+
+        // Force the visible-items check on the next measure, even if the count is unchanged.
+        _lastFirstVisibleIndex = -1;
+        _lastLastVisibleIndex = -1;
+        _lastItemCount = -1;
 
         InvalidateMeasure();
     }
@@ -136,6 +145,7 @@ public class VirtualizingUniformPanel : VirtualizingPanel
             }
         }
 
+        /*
         var currentVisibleDataItems = new List<object>();
         foreach (var child in Children)
         {
@@ -154,6 +164,34 @@ public class VirtualizingUniformPanel : VirtualizingPanel
             {
                 VisibleItemsChanged?.Invoke(this, currentVisibleDataItems);
             });
+        }
+        */
+        if (firstVisibleIndex != _lastFirstVisibleIndex ||
+            lastVisibleIndex != _lastLastVisibleIndex ||
+            items.Count != _lastItemCount)
+        {
+            _lastFirstVisibleIndex = firstVisibleIndex;
+            _lastLastVisibleIndex = lastVisibleIndex;
+            _lastItemCount = items.Count;
+
+            var currentVisibleDataItems = new List<object>();
+            foreach (var child in Children)
+            {
+                if (child.DataContext is object dataItem)
+                {
+                    currentVisibleDataItems.Add(dataItem);
+                }
+            }
+
+            // Only fire if the composition of visible items actually changed.
+            if (!_lastVisibleDataItems.SequenceEqual(currentVisibleDataItems))
+            {
+                _lastVisibleDataItems = currentVisibleDataItems;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    VisibleItemsChanged?.Invoke(this, currentVisibleDataItems);
+                });
+            }
         }
 
         return new Size(totalWidth, totalHeight);
@@ -274,5 +312,50 @@ public class VirtualizingUniformPanel : VirtualizingPanel
         return null;
     }
 
-    protected override IInputElement? GetControl(NavigationDirection direction, IInputElement? from, bool wrap) => from;
+    //protected override IInputElement? GetControl(NavigationDirection direction, IInputElement? from, bool wrap) => from;
+    protected override IInputElement? GetControl(NavigationDirection direction, IInputElement? from, bool wrap)
+    {
+        var items = Items;
+        if (items is null || items.Count == 0)
+        {
+            return null;
+        }
+
+        // Find the realized container that owns the focused element.
+        int current = -1;
+        for (Visual? v = from as Visual; v is not null; v = v.GetVisualParent())
+        {
+            if (v is Control c && _realizedIndices.TryGetValue(c, out int idx))
+            {
+                current = idx;
+                break;
+            }
+        }
+
+        if (current < 0)
+        {
+            return ContainerFromIndex(direction == NavigationDirection.Last ? items.Count - 1 : 0);
+        }
+
+        int columns = Math.Max(1, (int)(Bounds.Width / ItemWidth));
+
+        int target = direction switch
+        {
+            NavigationDirection.Left or NavigationDirection.Previous => current - 1,
+            NavigationDirection.Right or NavigationDirection.Next => current + 1,
+            NavigationDirection.Up => current - columns,
+            NavigationDirection.Down => current + columns,
+            NavigationDirection.First => 0,
+            NavigationDirection.Last => items.Count - 1,
+            _ => -1
+        };
+
+        if (target < 0 || target >= items.Count || target == current)
+        {
+            return null;
+        }
+
+        // Scrolls the target into view and returns its container.
+        return ScrollIntoView(target) ?? ContainerFromIndex(target);
+    }
 }

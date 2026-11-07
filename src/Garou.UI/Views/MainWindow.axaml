@@ -16,7 +16,6 @@
 
     <Window.Resources>
         <conv:BoundsToLocalRectConverter x:Key="BoundsToLocalRectConverter" />
-        <conv:NullToOpacityConverter x:Key="NullToOpacityConverter" />
         <DropShadowEffect x:Key="ThumbnailImageShadow" BlurRadius="6" Color="#50000000" OffsetX="0" OffsetY="2" />
         <StreamGeometry x:Key="SearchIcon">M15.1017 16.1624C13.717 17.3101 11.9391 18 10 18C5.58172 18 2 14.4183 2 10C2 5.58172 5.58172 2 10 2C14.4183 2 18 5.58172 18 10C18 11.9391 17.3101 13.717 16.1624 15.1018L20.7803 19.7197C21.0732 20.0126 21.0732 20.4874 20.7803 20.7803C20.4874 21.0732 20.0125 21.0732 19.7196 20.7803L15.1017 16.1624ZM16.5 10C16.5 6.41015 13.5899 3.5 10 3.5C6.41015 3.5 3.5 6.41015 3.5 10C3.5 13.5899 6.41015 16.5 10 16.5C13.5899 16.5 16.5 13.5899 16.5 10Z</StreamGeometry>
         <StreamGeometry x:Key="FolderAddIcon">M3.5 6.25V8H8.12868C8.32759 8 8.51836 7.92098 8.65901 7.78033L10.1893 6.25L8.65901 4.71967C8.51836 4.57902 8.32759 4.5 8.12868 4.5H5.25C4.2835 4.5 3.5 5.2835 3.5 6.25ZM2 6.25C2 4.45507 3.45507 3 5.25 3H8.12868C8.72542 3 9.29771 3.23705 9.71967 3.65901L11.5607 5.5H18.75C20.5449 5.5 22 6.95507 22 8.75V12.8096C21.5557 12.3832 21.051 12.0194 20.5 11.7322V8.75C20.5 7.7835 19.7165 7 18.75 7H11.5607L9.71967 8.84099C9.29771 9.26295 8.72542 9.5 8.12868 9.5H3.5V17.75C3.5 18.7165 4.2835 19.5 5.25 19.5H11.3135C11.4858 20.0335 11.7253 20.5368 12.0218 21H5.25C3.45507 21 2 19.5449 2 17.75V6.25ZM23 17.5C23 14.4624 20.5376 12 17.5 12C14.4624 12 12 14.4624 12 17.5C12 20.5376 14.4624 23 17.5 23C20.5376 23 23 20.5376 23 17.5ZM18.0006 18L18.0011 20.5035C18.0011 20.7797 17.7773 21.0035 17.5011 21.0035C17.225 21.0035 17.0011 20.7797 17.0011 20.5035L17.0006 18H14.4956C14.2197 18 13.9961 17.7762 13.9961 17.5C13.9961 17.2239 14.2197 17 14.4956 17H17.0005L17 14.4993C17 14.2231 17.2239 13.9993 17.5 13.9993C17.7761 13.9993 18 14.2231 18 14.4993L18.0005 17H20.4966C20.7725 17 20.9961 17.2238 20.9961 17.5C20.9961 17.7762 20.7725 18 20.4966 18H18.0006Z</StreamGeometry>
@@ -91,7 +90,9 @@
                 </StackPanel>
             </SplitView.Pane>
             <SplitView.Content>
-                <ListBox x:Name="MediaListBox" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" Margin="0,0,0,0" Padding="0,8,0,0" DoubleTapped="OnMediaDoubleTapped" Theme="{DynamicResource {x:Type ListBox}}">
+                <ListBox x:Name="MediaListBox" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" Margin="0,0,0,0" Padding="0,8,0,0" DoubleTapped="OnMediaDoubleTapped" Theme="{DynamicResource {x:Type ListBox}}"
+                         Classes.hide-names="{Binding !ShowFileNames}"
+                         Classes.hide-badges="{Binding !ShowFileTypeBadges}">
                     <ListBox.Styles>
                         <Style Selector="ListBoxItem">
                             <Setter Property="CornerRadius" Value="10" />
@@ -121,10 +122,15 @@
                             <Setter Property="Background" Value="#18808080" />
                             <Setter Property="BorderBrush" Value="#55808080" />
                         </Style>
-
-										<Style Selector="Border#ClipBorder:pointerover">
-											<Setter Property="RenderTransform" Value="Scale(1.05, 1.05)" />
-										</Style>
+                        <Style Selector="ListBox.hide-names TextBlock.media-title">
+                            <Setter Property="IsVisible" Value="False" />
+                        </Style>
+                        <Style Selector="ListBox.hide-badges Border.type-badge">
+                            <Setter Property="IsVisible" Value="False" />
+                        </Style>
+                        <Style Selector="Border#ClipBorder:pointerover">
+                            <Setter Property="RenderTransform" Value="Scale(1.05, 1.05)" />
+                        </Style>
                     </ListBox.Styles>
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -142,21 +148,31 @@
                                 </Border.ContextMenu>
                                 <StackPanel Spacing="4">
                                     <Grid Width="{Binding $parent[ListBox].DataContext.ThumbnailSize}" Height="{Binding $parent[ListBox].DataContext.ThumbnailSize}">
-                                        <Border CornerRadius="8" Effect="{StaticResource ThumbnailImageShadow}">
-                                            <Border x:Name="ClipBorder" CornerRadius="8" ClipToBounds="True" Background="Transparent">
-												<Border.Transitions>
-													<Transitions>
-														<TransformOperationsTransition Property="RenderTransform" Duration="0:00:00.200" />
-													</Transitions>
-												</Border.Transitions>
-												<Image x:Name="ThumbnailImage" Source="{Binding Thumbnail.Bitmap}" Stretch="Uniform">
-													<Image.Clip>
-														<RectangleGeometry Rect="{Binding Bounds, ElementName=ThumbnailImage, Converter={StaticResource BoundsToLocalRectConverter}}" RadiusX="8" RadiusY="8" />
-													</Image.Clip>
-												</Image>
-                                            </Border>
+                                        <Border CornerRadius="8" Effect="{StaticResource ThumbnailImageShadow}"> <!-- Effect costs a lot.  -->
+                                        <Border x:Name="ClipBorder" CornerRadius="8" ClipToBounds="True" Background="Transparent">
+                                            <Border.Transitions>
+                                                <Transitions>
+                                                    <TransformOperationsTransition Property="RenderTransform" Duration="0:00:00.200" />
+                                                </Transitions>
+                                            </Border.Transitions>
+
+                                            <TransitioningContentControl Content="{Binding Thumbnail.Bitmap, Mode=OneWay}">
+                                                <TransitioningContentControl.ContentTemplate>
+                                                    <DataTemplate DataType="Bitmap">
+                                                        <Image x:Name="ThumbnailImage" Margin="0" Source="{Binding}" Stretch="Uniform" VerticalAlignment="Center">
+                                                            <Image.Clip>
+                                                                <RectangleGeometry Rect="{Binding Bounds, ElementName=ThumbnailImage, Converter={StaticResource BoundsToLocalRectConverter}}" RadiusX="8" RadiusY="8" />
+                                                            </Image.Clip>
+                                                        </Image>
+                                                    </DataTemplate>
+                                                </TransitioningContentControl.ContentTemplate>
+                                                <TransitioningContentControl.PageTransition>
+                                                    <CrossFade Duration="0:00:00.150" />
+                                                </TransitioningContentControl.PageTransition>
+                                            </TransitioningContentControl>
                                         </Border>
-                                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7" Padding="7,3" CornerRadius="5" Background="#CC20242A" IsVisible="{Binding $parent[ListBox].DataContext.ShowFileTypeBadges}">
+                                        </Border>
+                                        <Border Classes="type-badge" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7" Padding="7,3" CornerRadius="5" Background="#CC20242A" IsVisible="{Binding $parent[ListBox].DataContext.ShowFileTypeBadges}">
                                             <TextBlock Text="{Binding MediaType}" Foreground="White" FontSize="11" FontWeight="SemiBold" />
                                         </Border>
                                     </Grid>
@@ -165,6 +181,51 @@
                             </Border>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
+                    <!--
+                    <ListBox.KeyBindings>
+					    <KeyBinding Command="{Binding QueueListviewEnterKeyCommand}" Gesture="Enter" />
+					    <KeyBinding Command="{Binding QueueListviewDeleteSelectedWithoutPromptCommand}" CommandParameter="{Binding #QueueListBox.SelectedItems}" Gesture="Ctrl+Delete"/>
+				    </ListBox.KeyBindings>
+                    -->
+                    <ListBox.Resources>
+                        <!-- Edit: AnimatedScrollViewer. -->
+                        <ControlTheme x:Key="{x:Type ListBox}" TargetType="ListBox">
+                            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                            <Setter Property="BorderThickness" Value="{DynamicResource ListBoxBorderThemeThickness}" />
+                            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+                            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+                            <Setter Property="ScrollViewer.IsScrollChainingEnabled" Value="True" />
+                            <Setter Property="ScrollViewer.IsScrollInertiaEnabled" Value="True" />
+                            <Setter Property="Template">
+                                <ControlTemplate>
+                                    <Border Name="border"
+                                            ClipToBounds="{TemplateBinding ClipToBounds}"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="{TemplateBinding CornerRadius}">
+                                        <vc:AnimatedScrollViewer Name="PART_ScrollViewer" Duration="0:00:00.250" ScrollMultiplier="1.5"
+                                                                 VerticalSnapPointsType="{TemplateBinding (ScrollViewer.VerticalSnapPointsType)}"
+                                                                 HorizontalSnapPointsType="{TemplateBinding (ScrollViewer.HorizontalSnapPointsType)}"
+                                                                 HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
+                                                                 VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}"
+                                                                 IsScrollChainingEnabled="{TemplateBinding (ScrollViewer.IsScrollChainingEnabled)}"
+                                                                 IsScrollInertiaEnabled="{TemplateBinding (ScrollViewer.IsScrollInertiaEnabled)}"
+                                                                 IsDeferredScrollingEnabled="{TemplateBinding (ScrollViewer.IsDeferredScrollingEnabled)}"
+                                                                 AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
+                                                                 BringIntoViewOnFocusChange="{TemplateBinding (ScrollViewer.BringIntoViewOnFocusChange)}">
+
+                                            <ItemsPresenter Name="PART_ItemsPresenter"
+                                                            ItemsPanel="{TemplateBinding ItemsPanel}"
+                                                            Margin="{TemplateBinding Padding}"/>
+                                        </vc:AnimatedScrollViewer>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter>
+                        </ControlTheme>
+                    </ListBox.Resources>
                 </ListBox>
             </SplitView.Content>
         </SplitView>
@@ -198,7 +259,7 @@
                                 <ToggleButton Classes="command-bar-toggle" Margin="2" ToolTip.Tip="File type badges" IsChecked="{Binding ShowFileTypeBadges, Mode=TwoWay}">
                                     <Path Width="14" Height="14" Data="{StaticResource TagIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
                                 </ToggleButton>
-                                
+
                                 <ToggleButton Classes="command-bar-toggle" Margin="2" ToolTip.Tip="Include subfolders" IsChecked="{Binding IncludeDescendants, Mode=TwoWay}">
                                     <Path Width="14" Height="14" Data="{StaticResource FolderArrowIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
                                 </ToggleButton>
