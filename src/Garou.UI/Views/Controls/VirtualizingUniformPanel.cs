@@ -190,7 +190,7 @@ public class VirtualizingUniformPanel : VirtualizingPanel
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
                     VisibleItemsChanged?.Invoke(this, currentVisibleDataItems);
-                });
+                },Avalonia.Threading.DispatcherPriority.Render);
             }
         }
 

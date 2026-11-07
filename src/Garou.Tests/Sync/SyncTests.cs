@@ -1,5 +1,6 @@
 using Garou.Domain.Abstractions;
 using Garou.Domain.Entities;
+using Garou.Domain.Enums;
 using Garou.Domain.Models;
 using Garou.Infrastructure.Sync;
 
@@ -27,11 +28,12 @@ public sealed class SyncTests
     [Fact]
     public async Task WhenInitialScanRunsThenOnlySupportedFilesAreIndexed()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var root = Path.Combine(Path.GetTempPath(), $"scan-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(root, "nested"));
-        await File.WriteAllBytesAsync(Path.Combine(root, "photo.jpg"), [1, 2, 3]);
-        await File.WriteAllBytesAsync(Path.Combine(root, "nested", "clip.mp4"), [1, 2, 3]);
-        await File.WriteAllTextAsync(Path.Combine(root, "notes.txt"), "not media");
+        await File.WriteAllBytesAsync(Path.Combine(root, "photo.jpg"), [1, 2, 3], cancellationToken);
+        await File.WriteAllBytesAsync(Path.Combine(root, "nested", "clip.mp4"), [1, 2, 3], cancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(root, "notes.txt"), "not media", cancellationToken);
         var repository = new FakeMediaFileRepository();
         var library = new LibraryDefinition { Id = "lib", RootPath = root };
 
@@ -41,7 +43,80 @@ public sealed class SyncTests
 
             Assert.Equal(2, repository.Upserted.Count);
             Assert.DoesNotContain(repository.Upserted, file => file.FileName == "notes.txt");
+            Assert.All(repository.Upserted, file => Assert.Null(file.ThumbnailPath));
             Assert.True(library.IsOnline);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenLibraryIsEmptyThenItsRootFolderIsCreated()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"empty-scan-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var folders = new FakeFolderRepository();
+
+        try
+        {
+            await CreateScanService(new FakeMediaFileRepository(), folders)
+                .ScanAsync(new LibraryDefinition { Id = "lib", RootPath = root }, null, cancellationToken);
+
+            Assert.Equal(root, Assert.Single(await folders.GetAllAsync(cancellationToken)).Path);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenAudioFileIsScannedThenItIsIndexedAsAudio()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"audio-scan-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        await File.WriteAllBytesAsync(Path.Combine(root, "track.mp3"), [1, 2, 3], cancellationToken);
+        var repository = new FakeMediaFileRepository();
+
+        try
+        {
+            await CreateScanService(repository).ScanAsync(new LibraryDefinition { Id = "lib", RootPath = root }, null, cancellationToken);
+
+            Assert.Equal(MediaType.Audio, Assert.Single(repository.Upserted).MediaType);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenManyFilesAreScannedThenWritesAreBatchedAndProgressIsThrottled()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"batch-scan-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var repository = new FakeMediaFileRepository();
+        var progress = new RecordingProgress();
+
+        try
+        {
+            for (var index = 0; index < 405; index++)
+            {
+                await File.WriteAllBytesAsync(Path.Combine(root, $"track{index}.mp3"), [1, 2, 3], cancellationToken);
+            }
+
+            await CreateScanService(repository).ScanAsync(
+                new LibraryDefinition { Id = "lib", RootPath = root },
+                progress,
+                cancellationToken);
+
+            Assert.Equal([200, 200, 5], repository.UpsertBatchSizes);
+            Assert.True(progress.Reports.Count < 405);
         }
         finally
         {
@@ -52,9 +127,10 @@ public sealed class SyncTests
     [Fact]
     public async Task WhenInitialScanRunsThenNoRecordsAreDeleted()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var root = Path.Combine(Path.GetTempPath(), $"nodelete-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
-        await File.WriteAllBytesAsync(Path.Combine(root, "photo.png"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(root, "photo.png"), [1, 2, 3], cancellationToken);
         var repository = new FakeMediaFileRepository();
 
         try
@@ -72,9 +148,10 @@ public sealed class SyncTests
     [Fact]
     public async Task WhenLibraryIsRescannedThenFilesMissingFromDatabaseAreIndexed()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var root = Path.Combine(Path.GetTempPath(), $"rescan-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
-        await File.WriteAllBytesAsync(Path.Combine(root, "photo.jpg"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(root, "photo.jpg"), [1, 2, 3], cancellationToken);
         var repository = new FakeMediaFileRepository();
 
         try
@@ -93,9 +170,10 @@ public sealed class SyncTests
     [Fact]
     public async Task WhenRescanRunsThenFilesMissingFromDiskAreDeleted()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var root = Path.Combine(Path.GetTempPath(), $"stale-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
-        await File.WriteAllBytesAsync(Path.Combine(root, "photo.jpg"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(root, "photo.jpg"), [1, 2, 3], cancellationToken);
         var stalePath = Path.Combine(root, "removed.jpg");
         var repository = new FakeMediaFileRepository();
         repository.StoredPaths.Add(Path.Combine(root, "photo.jpg"));
@@ -116,11 +194,12 @@ public sealed class SyncTests
     [Fact]
     public async Task WhenWatcherReportsRenameThenOldPathIsDeletedAndNewPathIsIndexed()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var root = Path.Combine(Path.GetTempPath(), $"rename-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         var newPath = Path.Combine(root, "renamed.jpg");
         var oldPath = Path.Combine(root, "original.jpg");
-        await File.WriteAllBytesAsync(newPath, [1, 2, 3]);
+        await File.WriteAllBytesAsync(newPath, [1, 2, 3], cancellationToken);
         var repository = new FakeMediaFileRepository();
         var library = new LibraryDefinition { Id = "lib", RootPath = root, IsEnabled = true };
         using var stop = new CancellationTokenSource();
@@ -175,21 +254,19 @@ public sealed class SyncTests
             watcher,
             new ScriptedLibraryRepository(library),
             new NoopMetadata(),
-            new NoopThumbnails(),
             repository,
             new FakeFolderRepository(),
             TimeProvider.System);
     }
 
-    private static MediaIndexerService CreateScanService(FakeMediaFileRepository repository)
+    private static MediaIndexerService CreateScanService(FakeMediaFileRepository repository, FakeFolderRepository? folders = null)
     {
         return new MediaIndexerService(
             new NoopWatcher(),
             new EmptyLibraryRepository(),
             new NoopMetadata(),
-            new NoopThumbnails(),
             repository,
-            new FakeFolderRepository(),
+            folders ?? new FakeFolderRepository(),
             TimeProvider.System);
     }
 
@@ -270,17 +347,24 @@ public sealed class SyncTests
             Task.FromResult(new MediaMetadata());
     }
 
-    private sealed class NoopThumbnails : IThumbnailGeneratorService
+    private sealed class RecordingProgress : IProgress<ScanProgress>
     {
-        public Task<string?> GenerateAsync(MediaFile mediaFile, CancellationToken cancellationToken) =>
-            Task.FromResult<string?>(null);
+        public List<ScanProgress> Reports { get; } = [];
 
-        public Task ClearCacheAsync(MediaFile mediaFile, CancellationToken cancellationToken) => Task.CompletedTask;
+        public void Report(ScanProgress value)
+        {
+            lock (Reports)
+            {
+                Reports.Add(value);
+            }
+        }
     }
 
     private sealed class FakeMediaFileRepository : IMediaFileRepository
     {
         public List<MediaFile> Upserted { get; } = [];
+
+        public List<int> UpsertBatchSizes { get; } = [];
 
         public int DeleteCount { get; private set; }
 
@@ -300,6 +384,7 @@ public sealed class SyncTests
             lock (Upserted)
             {
                 Upserted.AddRange(mediaFiles);
+                UpsertBatchSizes.Add(mediaFiles.Count);
             }
 
             return Task.CompletedTask;

@@ -35,7 +35,7 @@ public sealed class SqlitePersistenceTests : IDisposable
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT MAX(Version) FROM SchemaVersion;";
 
-        Assert.Equal(2L, await command.ExecuteScalarAsync());
+        Assert.Equal(2L, await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public sealed class SqlitePersistenceTests : IDisposable
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM SchemaVersion;";
 
-        Assert.Equal(2L, await command.ExecuteScalarAsync());
+        Assert.Equal(2L, await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -67,6 +67,7 @@ public sealed class SqlitePersistenceTests : IDisposable
     [Fact]
     public async Task WhenFolderSubtreeIsDeletedThenIndexedDataIsRemovedAndSourceFilesRemain()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         await new MigrationRunner(_connectionFactory).ApplyAsync(CancellationToken.None);
         var sourceDirectory = Path.Combine(Path.GetTempPath(), $"Garou-source-{Guid.NewGuid():N}");
         var childDirectory = Path.Combine(sourceDirectory, "child");
@@ -77,9 +78,9 @@ public sealed class SqlitePersistenceTests : IDisposable
         var rootMediaPath = Path.Combine(sourceDirectory, "root.jpg");
         var childMediaPath = Path.Combine(childDirectory, "child.jpg");
         var unrelatedMediaPath = Path.Combine(unrelatedDirectory, "unrelated.jpg");
-        await File.WriteAllBytesAsync(rootMediaPath, [1]);
-        await File.WriteAllBytesAsync(childMediaPath, [1]);
-        await File.WriteAllBytesAsync(unrelatedMediaPath, [1]);
+        await File.WriteAllBytesAsync(rootMediaPath, [1], cancellationToken);
+        await File.WriteAllBytesAsync(childMediaPath, [1], cancellationToken);
+        await File.WriteAllBytesAsync(unrelatedMediaPath, [1], cancellationToken);
 
         try
         {
@@ -106,14 +107,14 @@ public sealed class SqlitePersistenceTests : IDisposable
             await using (var command = connection.CreateCommand())
             {
                 command.CommandText = "INSERT INTO Tag (Name) VALUES ('test'); SELECT last_insert_rowid();";
-                var tagId = (long)(await command.ExecuteScalarAsync())!;
+                var tagId = (long)(await command.ExecuteScalarAsync(cancellationToken))!;
                 command.CommandText = "INSERT INTO MediaFileTag (MediaFileId, TagId) VALUES ($mediaFileId, $tagId);";
                 var mediaFileId = command.Parameters.AddWithValue("$mediaFileId", 0L);
                 command.Parameters.AddWithValue("$tagId", tagId);
                 foreach (var indexedFile in indexedFiles)
                 {
                     mediaFileId.Value = indexedFile!.Id;
-                    await command.ExecuteNonQueryAsync();
+                    await command.ExecuteNonQueryAsync(cancellationToken);
                 }
             }
 
@@ -130,7 +131,7 @@ public sealed class SqlitePersistenceTests : IDisposable
             await using var verifyConnection = await _connectionFactory.OpenAsync(CancellationToken.None);
             await using var verifyCommand = verifyConnection.CreateCommand();
             verifyCommand.CommandText = "SELECT COUNT(*) FROM MediaFileTag;";
-            Assert.Equal(1L, await verifyCommand.ExecuteScalarAsync());
+            Assert.Equal(1L, await verifyCommand.ExecuteScalarAsync(cancellationToken));
         }
         finally
         {

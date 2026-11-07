@@ -33,6 +33,8 @@ public partial class MainViewModel(
     private const double MaxLeftPaneWidth = 500;
     private long _nextAfterId;
     private bool _hasMoreItems;
+    private bool _isLoadingMore;
+    private readonly SemaphoreSlim _mediaLoadSemaphore = new(1, 1);
     private long? _selectedFolderId;
     private CancellationTokenSource? _reloadCts;
     private bool _isInitializing;
@@ -42,12 +44,13 @@ public partial class MainViewModel(
     private bool _includeImages = true;
     private bool _includeVideos = true;
     private bool _includeAudio = true;
+    private readonly ResettableObservableCollection<MediaItemViewModel> _items = new();
     private IReadOnlyList<MediaFile> _visibleThumbnailFiles = [];
     private readonly object _thumbnailRegenerationLock = new();
     private long _visibleThumbnailVersion;
     private bool _thumbnailRegenerationWorkerRunning;
 
-    public ObservableCollection<MediaItemViewModel> Items { get; } = [];
+    public ObservableCollection<MediaItemViewModel> Items => _items;
 
     public void Dispose()
     {
@@ -434,21 +437,28 @@ public partial class MainViewModel(
         LeftPaneWidth = Math.Clamp(appSettings.LeftPaneWidth, MinLeftPaneWidth, MaxLeftPaneWidth);
         await LoadFolderTreeAsync(cancellationToken);
 
+        FolderNode? selectedNode = null;
         if (appSettings.SelectedFolderId is { } savedFolderId)
         {
-            var node = FindFolderNode(FolderTree, savedFolderId);
-            Log(node is null
+            selectedNode = FindFolderNode(FolderTree, savedFolderId);
+            Log(selectedNode is null
                 ? $"Saved folder {savedFolderId} not found in tree"
                 : $"Restoring selected folder {savedFolderId}");
-            SelectedFolder = node;
-            FolderRestored?.Invoke(node);
         }
 
-        if (SelectedFolder is null)
+        selectedNode ??= FolderTree.FirstOrDefault();
+        _suppressSelectedFolderReload = true;
+        try
         {
-            FolderRestored?.Invoke(null);
-            await ReloadAsync(null, cancellationToken);
+            SelectedFolder = selectedNode;
         }
+        finally
+        {
+            _suppressSelectedFolderReload = false;
+        }
+
+        FolderRestored?.Invoke(selectedNode);
+        await ReloadAsync(_selectedFolderId, cancellationToken);
 
         Log("Initialize completed");
         _isInitializing = false;
@@ -512,12 +522,12 @@ public partial class MainViewModel(
             }
 
             _thumbnailRegenerationWorkerRunning = true;
-            IsGeneratingThumbnails = true;
+            //IsGeneratingThumbnails = true;
         }
 
         _ = RegenerateVisibleThumbnailsAsync();
     }
-
+    /*
     private async Task RegenerateVisibleThumbnailsAsync()
     {
         long observedVersion = 0;
@@ -603,13 +613,120 @@ public partial class MainViewModel(
             }
         }
     }
+    */
+    private async Task RegenerateVisibleThumbnailsAsync()
+    {
+        long observedVersion = 0;
+
+        try
+        {
+            while (true)
+            {
+                IReadOnlyList<MediaFile> visibleFiles;
+                int thumbnailWidth;
+                lock (_thumbnailRegenerationLock)
+                {
+                    observedVersion = _visibleThumbnailVersion;
+                    visibleFiles = _visibleThumbnailFiles;
+                    var baseThumbnailWidth = ThumbnailSize <= LargeThumbnailSizeThreshold
+                        ? SmallThumbnailWidth
+                        : LargeThumbnailWidth;
+                    thumbnailWidth = (int)Math.Round(baseThumbnailWidth * _renderScaling);
+                }
+
+                // Debounce: waiting here is not "generating", so the flag stays false.
+                await Task.Delay(ThumbnailRegenerationDelayMilliseconds);
+                if (!IsVisibleThumbnailVersionCurrent(observedVersion))
+                {
+                    continue;
+                }
+
+                var suffix = $"{thumbnailWidth}.jpg";
+                var staleFiles = new List<MediaFile>(visibleFiles.Count);
+                foreach (var file in visibleFiles)
+                {
+                    var thumbnailPath = file.ThumbnailPath;
+                    if (thumbnailPath is null ||
+                        !thumbnailPath.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ||
+                        !File.Exists(thumbnailPath))
+                    {
+                        staleFiles.Add(file);
+                    }
+                }
+
+                if (staleFiles.Count == 0)
+                {
+                    if (IsVisibleThumbnailVersionCurrent(observedVersion))
+                    {
+                        StatusText = "Visible thumbnails are up to date";
+                        break;
+                    }
+
+                    continue;
+                }
+
+                // Only now is work actually happening.
+                IsGeneratingThumbnails = true;
+                try
+                {
+                    await GenerateThumbnailsAsync(
+                        staleFiles,
+                        "Generating",
+                        (file, _) => thumbnailGenerator.GenerateAsync(file, thumbnailWidth, CancellationToken.None),
+                        CancellationToken.None,
+                        () => IsVisibleThumbnailVersionCurrent(observedVersion));
+                }
+                finally
+                {
+                    IsGeneratingThumbnails = false;
+                }
+
+                if (IsVisibleThumbnailVersionCurrent(observedVersion))
+                {
+                    StatusText = "Finished generating visible thumbnails";
+                    break;
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            StatusText = $"Thumbnail regeneration failed: {exception.Message}";
+            Log(StatusText);
+        }
+        finally
+        {
+            var restartWorker = false;
+            lock (_thumbnailRegenerationLock)
+            {
+                _thumbnailRegenerationWorkerRunning = false;
+                if (!_isInitializing && _visibleThumbnailVersion != observedVersion)
+                {
+                    _thumbnailRegenerationWorkerRunning = true;
+                    restartWorker = true;
+                }
+            }
+
+            // Covers the exit paths where generation never started.
+            IsGeneratingThumbnails = false;
+
+            if (restartWorker)
+            {
+                _ = RegenerateVisibleThumbnailsAsync();
+            }
+        }
+    }
 
     private bool IsVisibleThumbnailVersionCurrent(long version)
     {
+        /*
         lock (_thumbnailRegenerationLock)
         {
             return _visibleThumbnailVersion == version;
         }
+        */
+        // Interlocked.Read gives an atomic 64-bit read on 32-bit as well,
+        // without taking the lock on every check.
+        return Interlocked.Read(ref _visibleThumbnailVersion) == version;
     }
 
     private async Task<int> GenerateThumbnailsAsync(
@@ -636,6 +753,11 @@ public partial class MainViewModel(
                 await mediaFiles.UpdateThumbnailPathAsync(file.Id, thumbnailPath, cancellationToken);
                 SetLoadedThumbnail(file.Id, thumbnailPath);
                 generated++;
+
+                if (generated < files.Count && (shouldContinue is null || shouldContinue()))
+                {
+                    await Task.Delay(ThumbnailRegenerationDelayMilliseconds, cancellationToken);
+                }
             }
         }
 
@@ -697,14 +819,40 @@ public partial class MainViewModel(
         {
             StatusText = $"{path} is already a library. Rescanning...";
             await RunScanAsync(() => libraryCommands.RescanLibraryByRootAsync(path, progress, cancellationToken));
-            await LoadFolderTreeAsync(cancellationToken);
-            await ReloadAsync(_selectedFolderId, cancellationToken);
+            await ReloadLibraryRootAsync(path, cancellationToken);
             return;
         }
 
         StatusText = $"Scanning {path}...";
         await RunScanAsync(() => libraryCommands.RefreshLibraryAsync(id, progress, cancellationToken));
+        await ReloadLibraryRootAsync(path, cancellationToken);
+    }
+
+    private async Task ReloadLibraryRootAsync(string path, CancellationToken cancellationToken)
+    {
         await LoadFolderTreeAsync(cancellationToken);
+        var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var root = FolderTree.FirstOrDefault(node =>
+            string.Equals(
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(node.Folder.Path)),
+                fullPath,
+                StringComparison.OrdinalIgnoreCase));
+
+        if (root is not null)
+        {
+            _suppressSelectedFolderReload = true;
+            try
+            {
+                SelectedFolder = root;
+            }
+            finally
+            {
+                _suppressSelectedFolderReload = false;
+            }
+
+            FolderRestored?.Invoke(root);
+        }
+
         await ReloadAsync(_selectedFolderId, cancellationToken);
     }
 
@@ -740,7 +888,7 @@ public partial class MainViewModel(
     partial void OnSelectedFolderChanged(FolderNode? value)
     {
         _selectedFolderId = value?.Folder.Id;
-        Log($"Selection changed: folderId={_selectedFolderId?.ToString() ?? "all"}");
+        Log($"Selection changed: folderId={_selectedFolderId?.ToString() ?? "none"}");
         UpdateSettingsSession();
         if (!_suppressSelectedFolderReload)
         {
@@ -751,14 +899,32 @@ public partial class MainViewModel(
     [RelayCommand(CanExecute = nameof(CanLoadMore))]
     public async Task LoadMoreAsync(CancellationToken cancellationToken)
     {
-        _hasMoreItems = await LoadNextPageAsync(_selectedFolderId, cancellationToken);
-        LoadMoreCommand.NotifyCanExecuteChanged();
+        await _mediaLoadSemaphore.WaitAsync(cancellationToken);
+        try
+        {
+            if (!_hasMoreItems || _selectedFolderId is not { } folderId)
+            {
+                return;
+            }
+
+            _isLoadingMore = true;
+            LoadMoreCommand.NotifyCanExecuteChanged();
+            _hasMoreItems = await LoadNextPageAsync(folderId, cancellationToken);
+        }
+        finally
+        {
+            _isLoadingMore = false;
+            _mediaLoadSemaphore.Release();
+            LoadMoreCommand.NotifyCanExecuteChanged();
+        }
     }
 
-    private bool CanLoadMore() => _hasMoreItems;
+    private bool CanLoadMore() => _hasMoreItems && !_isLoadingMore;
 
     private void ScheduleReload(int delayMilliseconds)
     {
+        _hasMoreItems = false;
+        LoadMoreCommand.NotifyCanExecuteChanged();
         _reloadCts?.Cancel();
         _reloadCts = new CancellationTokenSource();
         _ = ReloadAfterDelayAsync(delayMilliseconds, _reloadCts.Token);
@@ -811,29 +977,47 @@ public partial class MainViewModel(
 
     private async Task ReloadAsync(long? folderId, CancellationToken cancellationToken)
     {
-        Log($"Reload started: folderId={folderId?.ToString() ?? "all"} search='{SearchText}'");
-        foreach (var item in Items)
+        await _mediaLoadSemaphore.WaitAsync(cancellationToken);
+        try
         {
-            item.Dispose();
-        }
-
-        Items.Clear();
-        _nextAfterId = 0;
-        var hasMore = await LoadNextPageAsync(folderId, cancellationToken);
-        if (!IncludeDescendants)
-        {
-            while (hasMore)
+            cancellationToken.ThrowIfCancellationRequested();
+            Log($"Reload started: folderId={folderId?.ToString() ?? "none"} search='{SearchText}'");
+            foreach (var item in Items)
             {
+                item.Dispose();
+            }
+
+            _items.ReplaceAll([]);
+            _nextAfterId = 0;
+            _hasMoreItems = false;
+            LoadMoreCommand.NotifyCanExecuteChanged();
+            if (folderId is null)
+            {
+                StatusText = "No library folder selected";
+                return;
+            }
+
+            var selectedFolder = FindFolderNode(FolderTree, folderId.Value);
+            var shouldPaginate = IncludeDescendants && selectedFolder?.Children.Count > 0;
+            var hasMore = await LoadNextPageAsync(folderId, cancellationToken);
+            while (!shouldPaginate && hasMore)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
                 hasMore = await LoadNextPageAsync(folderId, cancellationToken);
             }
+
+            _hasMoreItems = shouldPaginate && hasMore;
+            LoadMoreCommand.NotifyCanExecuteChanged();
+
+            var fileCount = await queries.CountAsync(CreateQuery(folderId, afterId: 0), cancellationToken);
+            var folderCount = CountFolders(folderId);
+            StatusText = $"{fileCount} files, {folderCount} folders";
         }
-
-        _hasMoreItems = IncludeDescendants && hasMore;
-        LoadMoreCommand.NotifyCanExecuteChanged();
-
-        var fileCount = await queries.CountAsync(CreateQuery(folderId, afterId: 0), cancellationToken);
-        var folderCount = CountFolders(folderId);
-        StatusText = $"{fileCount} files, {folderCount} folders";
+        finally
+        {
+            _mediaLoadSemaphore.Release();
+            LoadMoreCommand.NotifyCanExecuteChanged();
+        }
     }
 
     private int CountFolders(long? folderId)
@@ -869,17 +1053,37 @@ public partial class MainViewModel(
     {
         var page = await queries.SearchPageAsync(CreateQuery(folderId, _nextAfterId), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        foreach (var item in page.Items)
-        {
-            var index = 0;
-            while (index < Items.Count && LogicalFileNameComparer.Instance.Compare(Items[index].FileName, item.FileName) <= 0)
-            {
-                index++;
-            }
 
-            Items.Insert(index, new MediaItemViewModel(item));
+        var newItems = page.Items
+            .OrderBy(item => item.FileName, LogicalFileNameComparer.Instance)
+            .Select(item => new MediaItemViewModel(item))
+            .ToArray();
+        var mergedItems = new List<MediaItemViewModel>(Items.Count + newItems.Length);
+        var existingIndex = 0;
+        var newIndex = 0;
+        while (existingIndex < Items.Count && newIndex < newItems.Length)
+        {
+            if (LogicalFileNameComparer.Instance.Compare(Items[existingIndex].FileName, newItems[newIndex].FileName) <= 0)
+            {
+                mergedItems.Add(Items[existingIndex++]);
+            }
+            else
+            {
+                mergedItems.Add(newItems[newIndex++]);
+            }
         }
 
+        while (existingIndex < Items.Count)
+        {
+            mergedItems.Add(Items[existingIndex++]);
+        }
+
+        while (newIndex < newItems.Length)
+        {
+            mergedItems.Add(newItems[newIndex++]);
+        }
+
+        _items.ReplaceAll(mergedItems);
         Log($"Page loaded: returned={page.Items.Count} total={Items.Count} afterId={_nextAfterId} nextAfterId={page.NextAfterId?.ToString() ?? "none"}");
         _nextAfterId = page.NextAfterId ?? _nextAfterId;
         return page.Items.Count == PageSize;

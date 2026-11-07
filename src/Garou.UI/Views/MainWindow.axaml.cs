@@ -29,7 +29,9 @@ public partial class MainWindow : Window
     {
         _settingsSession = settingsSession;
         _wasMaximized = settingsSession.Current.WindowMaximized ?? false;
+        
         InitializeComponent();
+
         LeftPaneGridSplitter.AddHandler(InputElement.PointerReleasedEvent, OnGridSplitterPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
         MediaListBox.AddHandler(ScrollViewer.ScrollChangedEvent, OnMediaListScrollChanged);
         Loaded += OnLoaded;

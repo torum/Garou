@@ -108,7 +108,7 @@ public sealed class SettingsStoreTests : IDisposable
     [Fact]
     public async Task WhenFileTypeBadgePreferenceIsMissingThenItDefaultsToTrue()
     {
-        await File.WriteAllTextAsync(_settingsPath, "<Settings />");
+        await File.WriteAllTextAsync(_settingsPath, "<Settings />", TestContext.Current.CancellationToken);
         var store = new SettingsStore(_settingsPath);
 
         var loaded = await store.LoadAsync(CancellationToken.None);
@@ -119,7 +119,7 @@ public sealed class SettingsStoreTests : IDisposable
     [Fact]
     public async Task WhenDescendantPreferenceIsMissingThenItDefaultsToTrue()
     {
-        await File.WriteAllTextAsync(_settingsPath, "<Settings />");
+        await File.WriteAllTextAsync(_settingsPath, "<Settings />", TestContext.Current.CancellationToken);
         var store = new SettingsStore(_settingsPath);
 
         var loaded = await store.LoadAsync(CancellationToken.None);

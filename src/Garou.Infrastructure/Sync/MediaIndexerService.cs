@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using System.Threading.Channels;
 using Garou.Domain.Abstractions;
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
@@ -10,7 +10,6 @@ public sealed class MediaIndexerService(
     IFileWatcherService watcher,
     ILibraryRepository libraries,
     IMetadataExtractionService metadataExtraction,
-    IThumbnailGeneratorService thumbnailGenerator,
     IMediaFileRepository mediaFiles,
     IFolderRepository folders,
     TimeProvider timeProvider) : ILibraryScanner
@@ -26,6 +25,11 @@ public sealed class MediaIndexerService(
     private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".mp4", ".mkv", ".mov", ".avi", ".wmv", ".webm", ".m4v", ".mpg", ".mpeg"
+    };
+
+    private static readonly HashSet<string> AudioExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp3", ".m4a", ".aac", ".flac", ".wav", ".wma", ".ogg", ".opus", ".aif", ".aiff"
     };
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -74,6 +78,7 @@ public sealed class MediaIndexerService(
         var known = await mediaFiles.GetSignaturesUnderRootAsync(library.RootPath, cancellationToken).ConfigureAwait(false);
 
         var folderIds = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        await EnsureFolderAsync(library.RootPath, library.RootPath, folderIds, cancellationToken).ConfigureAwait(false);
         foreach (var directory in files.Select(Path.GetDirectoryName).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
         {
             await EnsureFolderAsync(directory, library.RootPath, folderIds, cancellationToken).ConfigureAwait(false);
@@ -81,29 +86,91 @@ public sealed class MediaIndexerService(
 
         var changed = files.Where(path => IsChanged(path, known)).ToList();
         var processed = 0;
-        var results = new ConcurrentBag<MediaFile>();
-        await Parallel.ForEachAsync(
-            changed,
-            new ParallelOptions
+        var progressLock = new object();
+        var lastReportedTimestamp = timeProvider.GetTimestamp();
+        var channel = Channel.CreateBounded<MediaFile>(new BoundedChannelOptions(BatchSize * 2)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true
+        });
+        using var processingCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        void ReportProgress(int done)
+        {
+            var now = timeProvider.GetTimestamp();
+            lock (progressLock)
             {
-                MaxDegreeOfParallelism = Environment.ProcessorCount,
-                CancellationToken = cancellationToken
-            },
-            async (path, ct) =>
-            {
-                var mediaFile = await BuildMediaFileAsync(path, folderIds[Path.GetDirectoryName(path)!], ct).ConfigureAwait(false);
-                if (mediaFile is not null)
+                if (done != changed.Count && timeProvider.GetElapsedTime(lastReportedTimestamp, now) < TimeSpan.FromMilliseconds(200))
                 {
-                    results.Add(mediaFile);
+                    return;
                 }
 
-                var done = Interlocked.Increment(ref processed);
-                progress?.Report(new ScanProgress("Indexing media", done, changed.Count));
-            }).ConfigureAwait(false);
+                lastReportedTimestamp = now;
+            }
 
-        foreach (var batch in results.Chunk(BatchSize))
+            progress?.Report(new ScanProgress("Indexing media", done, changed.Count));
+        }
+
+        async Task ProcessChangedFilesAsync()
         {
-            await mediaFiles.UpsertBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await Parallel.ForEachAsync(
+                    changed,
+                    new ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = Environment.ProcessorCount,
+                        CancellationToken = processingCancellation.Token
+                    },
+                    async (path, ct) =>
+                    {
+                        var mediaFile = await BuildMediaFileAsync(path, folderIds[Path.GetDirectoryName(path)!], ct).ConfigureAwait(false);
+                        if (mediaFile is not null)
+                        {
+                            await channel.Writer.WriteAsync(mediaFile, ct).ConfigureAwait(false);
+                        }
+
+                        ReportProgress(Interlocked.Increment(ref processed));
+                    }).ConfigureAwait(false);
+            }
+            finally
+            {
+                channel.Writer.TryComplete();
+            }
+        }
+
+        var processingTask = ProcessChangedFilesAsync();
+        try
+        {
+            var batch = new List<MediaFile>(BatchSize);
+            await foreach (var mediaFile in channel.Reader.ReadAllAsync(processingCancellation.Token).ConfigureAwait(false))
+            {
+                batch.Add(mediaFile);
+                if (batch.Count == BatchSize)
+                {
+                    await mediaFiles.UpsertBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+                    batch.Clear();
+                }
+            }
+
+            await processingTask.ConfigureAwait(false);
+            if (batch.Count > 0)
+            {
+                await mediaFiles.UpsertBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            processingCancellation.Cancel();
+            try
+            {
+                await processingTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (processingCancellation.IsCancellationRequested)
+            {
+            }
+
+            throw;
         }
 
         var seen = files.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -169,23 +236,7 @@ public sealed class MediaIndexerService(
             FolderId = folderId
         };
 
-        var thumbnailPath = await thumbnailGenerator.GenerateAsync(draft, cancellationToken).ConfigureAwait(false);
-        return new MediaFile
-        {
-            Path = draft.Path,
-            FileName = draft.FileName,
-            Extension = draft.Extension,
-            MediaType = draft.MediaType,
-            FileSize = draft.FileSize,
-            Width = draft.Width,
-            Height = draft.Height,
-            DurationSeconds = draft.DurationSeconds,
-            CreatedDateUtc = draft.CreatedDateUtc,
-            ModifiedDateUtc = draft.ModifiedDateUtc,
-            LastIndexedUtc = draft.LastIndexedUtc,
-            FolderId = draft.FolderId,
-            ThumbnailPath = thumbnailPath
-        };
+        return draft;
     }
 
     internal async Task IndexFileAsync(string rootPath, string path, CancellationToken cancellationToken)
@@ -244,10 +295,11 @@ public sealed class MediaIndexerService(
     }
 
     internal static bool IsSupported(string extension) =>
-        ImageExtensions.Contains(extension) || VideoExtensions.Contains(extension);
+        ImageExtensions.Contains(extension) || VideoExtensions.Contains(extension) || AudioExtensions.Contains(extension);
 
     private static MediaType ResolveMediaType(string extension) =>
         ImageExtensions.Contains(extension) ? MediaType.Image
         : VideoExtensions.Contains(extension) ? MediaType.Video
+        : AudioExtensions.Contains(extension) ? MediaType.Audio
         : MediaType.Unknown;
 }

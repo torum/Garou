@@ -28,8 +28,14 @@ public sealed class ThumbnailGeneratorService(
             return null;
         }
 
-        Directory.CreateDirectory(thumbnailDirectory);
         var thumbnailPath = Path.Combine(thumbnailDirectory, ThumbnailFileName(mediaFile.Path, thumbnailWidth));
+        if (File.Exists(thumbnailPath))
+        {
+            await RegisterThumbnailAsync(thumbnailPath, cancellationToken).ConfigureAwait(false);
+            return thumbnailPath;
+        }
+
+        Directory.CreateDirectory(thumbnailDirectory);
 
         var arguments = BuildArguments(mediaFile, thumbnailPath, thumbnailWidth);
         var succeeded = await ffmpeg.RunAsync(arguments, cancellationToken).ConfigureAwait(false);
@@ -38,47 +44,20 @@ public sealed class ThumbnailGeneratorService(
             return null;
         }
 
-        await cacheRepository.UpsertAsync(
+        await RegisterThumbnailAsync(thumbnailPath, cancellationToken).ConfigureAwait(false);
+
+        return thumbnailPath;
+    }
+
+    private Task RegisterThumbnailAsync(string thumbnailPath, CancellationToken cancellationToken) =>
+        cacheRepository.UpsertAsync(
             new ThumbnailCacheEntry
             {
                 ThumbnailPath = thumbnailPath,
                 SizeBytes = new FileInfo(thumbnailPath).Length,
                 LastAccessUtc = timeProvider.GetUtcNow().UtcDateTime
             },
-            cancellationToken).ConfigureAwait(false);
-
-        await RemoveSupersededThumbnailsAsync(ThumbnailFilePrefix(mediaFile.Path), thumbnailPath, cancellationToken)
-            .ConfigureAwait(false);
-
-        return thumbnailPath;
-    }
-
-    private async Task RemoveSupersededThumbnailsAsync(
-        string thumbnailPrefix,
-        string currentThumbnailPath,
-        CancellationToken cancellationToken)
-    {
-        if (!Directory.Exists(thumbnailDirectory))
-        {
-            return;
-        }
-
-        foreach (var path in Directory.EnumerateFiles(thumbnailDirectory, $"{thumbnailPrefix}*.jpg"))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (string.Equals(path, currentThumbnailPath, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-
-            await cacheRepository.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
-        }
-    }
+            cancellationToken);
 
     public async Task ClearCacheAsync(MediaFile mediaFile, CancellationToken cancellationToken)
     {

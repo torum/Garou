@@ -50,8 +50,44 @@ public sealed class ThumbnailTests
     }
 
     [Fact]
+    public async Task WhenRequestedWidthIsCachedThenExistingVariantIsReused()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var directory = Path.Combine(Path.GetTempPath(), $"Garou-thumbs-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var sourcePath = "photo.jpg";
+        var requestedPath = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 200));
+        var otherWidthPath = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 320));
+        await File.WriteAllBytesAsync(requestedPath, [1], cancellationToken);
+        await File.WriteAllBytesAsync(otherWidthPath, [1], cancellationToken);
+        var repository = new FakeCacheRepository();
+        var generator = new ThumbnailGeneratorService(
+            new FfmpegRunner(Path.Combine(Path.GetTempPath(), $"missing-ffmpeg-{Guid.NewGuid():N}"), TimeSpan.FromSeconds(5)),
+            repository,
+            directory,
+            TimeProvider.System);
+
+        try
+        {
+            var result = await generator.GenerateAsync(
+                new MediaFile { Path = sourcePath, FileName = "photo.jpg", Extension = ".jpg", MediaType = MediaType.Image },
+                200,
+                cancellationToken);
+
+            Assert.Equal(requestedPath, result);
+            Assert.True(File.Exists(otherWidthPath));
+            Assert.Single(repository.Upserted);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task WhenMediaCacheIsClearedThenAllThumbnailWidthsAreRemoved()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var directory = Path.Combine(Path.GetTempPath(), $"Garou-thumbs-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         var sourcePath = "photo.jpg";
@@ -73,7 +109,7 @@ public sealed class ThumbnailTests
 
         foreach (var path in thumbnailPaths.Append(unrelatedThumbnailPath))
         {
-            await File.WriteAllBytesAsync(path!, [1]);
+            await File.WriteAllBytesAsync(path!, [1], cancellationToken);
             repository.Add(new ThumbnailCacheEntry { ThumbnailPath = path!, SizeBytes = 1, LastAccessUtc = DateTime.UtcNow });
         }
 
@@ -83,7 +119,7 @@ public sealed class ThumbnailTests
             directory,
             TimeProvider.System);
 
-        await generator.ClearCacheAsync(mediaFile, CancellationToken.None);
+        await generator.ClearCacheAsync(mediaFile, cancellationToken);
 
         Assert.All(thumbnailPaths, path => Assert.False(File.Exists(path)));
         Assert.Equal([unrelatedThumbnailPath], repository.Remaining());
@@ -110,11 +146,12 @@ public sealed class ThumbnailTests
     [Fact]
     public async Task WhenCacheExceedsLimitThenLeastRecentlyAccessedEntriesAreEvicted()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var repository = new FakeCacheRepository();
         var older = Path.Combine(Path.GetTempPath(), $"old-{Guid.NewGuid():N}.jpg");
         var newer = Path.Combine(Path.GetTempPath(), $"new-{Guid.NewGuid():N}.jpg");
-        await File.WriteAllBytesAsync(older, new byte[10]);
-        await File.WriteAllBytesAsync(newer, new byte[10]);
+        await File.WriteAllBytesAsync(older, new byte[10], cancellationToken);
+        await File.WriteAllBytesAsync(newer, new byte[10], cancellationToken);
         repository.Add(new ThumbnailCacheEntry { ThumbnailPath = older, SizeBytes = 10, LastAccessUtc = DateTime.UtcNow.AddDays(-1) });
         repository.Add(new ThumbnailCacheEntry { ThumbnailPath = newer, SizeBytes = 10, LastAccessUtc = DateTime.UtcNow });
 
@@ -155,17 +192,18 @@ public sealed class ThumbnailTests
     [Fact]
     public async Task WhenPeriodicTickFiresThenCacheIsEvicted()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var repository = new FakeCacheRepository();
         var settingsSession = new AppSettingsSession();
         settingsSession.Initialize(new AppSettings { ThumbnailCacheLimitBytes = 10 });
         repository.Add(new ThumbnailCacheEntry { ThumbnailPath = "tick.jpg", SizeBytes = 20, LastAccessUtc = DateTime.UtcNow });
         var timeProvider = new ManualTimeProvider();
         var scheduler = new ThumbnailEvictionScheduler(new ThumbnailCacheEvictionService(repository), settingsSession, timeProvider);
-        using var cancellation = new CancellationTokenSource();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         var running = scheduler.RunAsync(TimeSpan.FromMinutes(10), cancellation.Token);
 
         timeProvider.Tick();
-        await repository.Deleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await repository.Deleted.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running);
 
