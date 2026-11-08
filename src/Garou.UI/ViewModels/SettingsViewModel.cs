@@ -23,6 +23,9 @@ public partial class SettingsViewModel : ObservableObject
     private string _videoEditorApplicationPath = string.Empty;
     private string _audioViewerApplicationPath = string.Empty;
     private string _audioEditorApplicationPath = string.Empty;
+    private string _themePreference = "Default";
+    [ObservableProperty]
+    private int _selectedThemeIndex;
 
     public SettingsViewModel(AppSettingsSession settingsSession, SettingsStore settingsStore)
     {
@@ -51,6 +54,8 @@ public partial class SettingsViewModel : ObservableObject
         _localizer = new ResourceLocalizer(CultureInfo.GetCultureInfo(value == "ja" ? "ja" : "en"));
         OnPropertyChanged(nameof(SettingsTitle));
         OnPropertyChanged(nameof(LanguageLabel));
+        OnPropertyChanged(nameof(ThemeLabel));
+        OnPropertyChanged(nameof(ThemeOptions));
         OnPropertyChanged(nameof(ExtensionsLabel));
         OnPropertyChanged(nameof(ExtensionsDescription));
         OnPropertyChanged(nameof(ExtensionGroups));
@@ -74,6 +79,25 @@ public partial class SettingsViewModel : ObservableObject
     public string SettingsTitle => _localizer["SettingsTitle"];
 
     public string LanguageLabel => _localizer["LanguageLabel"];
+
+    public string ThemeLabel => _localizer["ThemeLabel"];
+
+    public IReadOnlyList<string> ThemeOptions =>
+    [
+        _localizer["SystemDefaultTheme"],
+        _localizer["LightTheme"],
+        _localizer["DarkTheme"]
+    ];
+
+    partial void OnSelectedThemeIndexChanged(int value)
+    {
+        _themePreference = value switch
+        {
+            1 => "Light",
+            2 => "Dark",
+            _ => "Default"
+        };
+    }
 
     public string ExtensionsLabel => _localizer["IncludedExtensionsLabel"];
 
@@ -180,6 +204,12 @@ public partial class SettingsViewModel : ObservableObject
         SelectedLanguage = SupportedLanguages.Contains(settings.Language, StringComparer.OrdinalIgnoreCase)
             ? settings.Language
             : "en";
+        SelectedThemeIndex = settings.ThemePreference switch
+        {
+            "Light" => 1,
+            "Dark" => 2,
+            _ => 0
+        };
         CacheLimitMegabytes = Math.Clamp(settings.ThumbnailCacheLimitBytes / (double)BytesPerMegabyte, 1, MaximumCacheLimitMegabytes);
         ImageViewerApplicationPath = settings.ImageViewerApplicationPath;
         ImageEditorApplicationPath = settings.ImageEditorApplicationPath;
@@ -220,6 +250,7 @@ public partial class SettingsViewModel : ObservableObject
         cancellationToken.ThrowIfCancellationRequested();
         var settings = _settingsSession.Current;
         settings.Language = SelectedLanguage;
+        settings.ThemePreference = _themePreference;
         settings.ThumbnailCacheLimitBytes = (long)Math.Round(CacheLimitMegabytes, MidpointRounding.AwayFromZero) * BytesPerMegabyte;
         settings.IncludedExtensions = includedExtensions;
         settings.ScanSubfolders = ScanSubfolders;
@@ -229,7 +260,8 @@ public partial class SettingsViewModel : ObservableObject
         settings.VideoEditorApplicationPath = VideoEditorApplicationPath.Trim();
         settings.AudioViewerApplicationPath = AudioViewerApplicationPath.Trim();
         settings.AudioEditorApplicationPath = AudioEditorApplicationPath.Trim();
-        await _settingsStore.SaveAsync(settings, cancellationToken).ConfigureAwait(false);
+        await _settingsStore.SaveAsync(settings, cancellationToken);
+        App.ApplyTheme(settings.ThemePreference);
         StatusText = _localizer["SettingsSaved"];
     }
 }

@@ -4,6 +4,8 @@ public sealed class AppSettings
 {
     public string Language { get; set; } = "en";
 
+    public string ThemePreference { get; set; } = "Default";
+
     public long ThumbnailCacheLimitBytes { get; set; } = 900L * 1024 * 1024;
 
     public List<string> IncludedExtensions { get; set; } = [.. MediaFileExtensions.All];

@@ -7,6 +7,7 @@ namespace Garou.UI.Models;
 public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
 {
     private Bitmap? _bitmap;
+    private ThumbnailLoadState _state = ThumbnailLoadState.Loading;
     private bool _disposed;
 
     public ThumbnailImage(string path)
@@ -14,6 +15,21 @@ public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
         if (!string.IsNullOrEmpty(path))
         {
             _ = LoadAsync(path);
+        }
+    }
+
+    public ThumbnailLoadState State
+    {
+        get => _state;
+        private set
+        {
+            if (_state == value)
+            {
+                return;
+            }
+
+            _state = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(State)));
         }
     }
 
@@ -58,9 +74,11 @@ public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
             }
 
             Bitmap = bitmap;
+            State = ThumbnailLoadState.Loaded;
         }
         catch (Exception exception)
         {
+            State = ThumbnailLoadState.Failed;
             Debug.WriteLine($"[ThumbnailImage] Failed to load '{path}': {exception.GetType().Name} {exception.Message}");
         }
     }

@@ -19,6 +19,8 @@ namespace Garou
         [STAThread]
         public static void Main(string[] args)
         {
+            System.Diagnostics.Debug.WriteLine($"Garou.UI starting with args: {string.Join(" ", args)}");
+
             var services = ServiceRegistration.Build();
             services.GetRequiredService<DatabaseInitializer>()
                 .InitializeAsync(CancellationToken.None)
@@ -33,6 +35,7 @@ namespace Garou
             using var lifetime = new CancellationTokenSource();
             foreach (var hostedService in hostedServices)
             {
+                System.Diagnostics.Debug.WriteLine($"Garou.UI starting hosted service: {hostedService.GetType().Name}");
                 hostedService.StartAsync(lifetime.Token).GetAwaiter().GetResult();
             }
 

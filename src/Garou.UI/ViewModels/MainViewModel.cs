@@ -9,6 +9,7 @@ using Garou.Domain.Entities;
 using Garou.Domain.Models;
 using Garou.Domain.Abstractions;
 using Garou.Infrastructure.Settings;
+using Garou.UI.Models;
 
 namespace Garou.ViewModels;
 
@@ -491,6 +492,15 @@ public partial class MainViewModel(
         previousItem.Dispose();
     }
 
+    private void SetThumbnailState(Guid mediaFileId, ThumbnailLoadState state)
+    {
+        var index = IndexOfLoadedItem(mediaFileId);
+        if (index >= 0)
+        {
+            Items[index].SetThumbnailState(state);
+        }
+    }
+
     private int IndexOfLoadedItem(Guid mediaFileId)
     {
         for (var index = 0; index < Items.Count; index++)
@@ -834,17 +844,37 @@ public partial class MainViewModel(
             }
 
             StatusText = $"{progressVerb} thumbnail: {file.FileName}";
-            var thumbnailPath = await generate(file, cancellationToken);
-            if (thumbnailPath is not null)
-            {
-                await mediaFiles.UpdateThumbnailPathAsync(file.Id, thumbnailPath, cancellationToken);
-                SetLoadedThumbnail(file.Id, thumbnailPath);
-                generated++;
+            SetThumbnailState(file.Id, ThumbnailLoadState.Loading);
 
-                if (generated < files.Count && (shouldContinue is null || shouldContinue()))
-                {
-                    await Task.Delay(ThumbnailRegenerationDelayMilliseconds, cancellationToken);
-                }
+            string? thumbnailPath;
+            try
+            {
+                thumbnailPath = await generate(file, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                SetThumbnailState(file.Id, ThumbnailLoadState.Pending);
+                throw;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                SetThumbnailState(file.Id, ThumbnailLoadState.Failed);
+                throw;
+            }
+
+            if (thumbnailPath is null)
+            {
+                SetThumbnailState(file.Id, ThumbnailLoadState.Failed);
+                continue;
+            }
+
+            await mediaFiles.UpdateThumbnailPathAsync(file.Id, thumbnailPath, cancellationToken);
+            SetLoadedThumbnail(file.Id, thumbnailPath);
+            generated++;
+
+            if (generated < files.Count && (shouldContinue is null || shouldContinue()))
+            {
+                await Task.Delay(ThumbnailRegenerationDelayMilliseconds, cancellationToken);
             }
         }
 

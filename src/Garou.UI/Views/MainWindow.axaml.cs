@@ -43,26 +43,23 @@ public partial class MainWindow : Window
         DetailsPaneGridSplitter.AddHandler(InputElement.PointerReleasedEvent, OnDetailsPaneGridSplitterPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
         Loaded += OnLoaded;
         ScalingChanged += OnScalingChanged;
-        PositionChanged += (_, _) => CacheNormalBounds();
-        SizeChanged += (_, _) => CacheNormalBounds();
+        PositionChanged += (_, _) => ScheduleNormalBoundsCache();
+        SizeChanged += (_, _) => ScheduleNormalBoundsCache();
+        Activated += (_, _) => ScheduleNormalBoundsCache();
         PropertyChanged += (_, change) =>
         {
-            if (change.Property == Window.WindowStateProperty)
+            if (change.Property == Window.WindowStateProperty && WindowState is WindowState.Normal or WindowState.Maximized)
             {
-                if (WindowState is WindowState.Normal or WindowState.Maximized)
-                {
-                    _wasMaximized = WindowState == WindowState.Maximized;
-                }
-                CacheNormalBounds();
+                _wasMaximized = WindowState == WindowState.Maximized;
             }
         };
         Closed += OnClosed;
+
+        RestoreWindowBounds();
     }
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
-        RestoreWindowBounds();
-
         if (DataContext is MainViewModel viewModel)
         {
             _detailsPaneWidth = Math.Clamp(_settingsSession.Current.DetailsPaneWidth, 180, 600);
@@ -88,29 +85,39 @@ public partial class MainWindow : Window
         if (settings.WindowWidth is { } width && double.IsFinite(width) && width >= MinWidth)
         {
             Width = width;
+            _normalWidth = width;
         }
 
         if (settings.WindowHeight is { } height && double.IsFinite(height) && height >= MinHeight)
         {
             Height = height;
+            _normalHeight = height;
         }
 
         if (settings.WindowX is { } x && settings.WindowY is { } y)
         {
             var position = new PixelPoint(x, y);
-            var screen = Screens?.All.FirstOrDefault(candidate => candidate.WorkingArea.Contains(position));
+            var screens = Screens?.All;
+            var screen = screens?.FirstOrDefault(candidate => candidate.WorkingArea.Contains(position))
+                ?? screens?.FirstOrDefault();
             if (screen is not null)
             {
-                Position = position;
-                Width = Math.Min(Width, Math.Max(MinWidth, screen.WorkingArea.Width / screen.Scaling));
-                Height = Math.Min(Height, Math.Max(MinHeight, screen.WorkingArea.Height / screen.Scaling));
+                Width = _normalWidth = Math.Min(Width, Math.Max(MinWidth, screen.WorkingArea.Width / screen.Scaling));
+                Height = _normalHeight = Math.Min(Height, Math.Max(MinHeight, screen.WorkingArea.Height / screen.Scaling));
+                _normalPosition = screen.WorkingArea.Contains(position)
+                    ? position
+                    : new PixelPoint(screen.WorkingArea.X, screen.WorkingArea.Y);
+                Position = _normalPosition;
             }
         }
 
-        CacheNormalBounds();
         if (_wasMaximized)
         {
             WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            WindowState = WindowState.Normal;
         }
     }
 
@@ -130,6 +137,11 @@ public partial class MainWindow : Window
         _normalPosition = Position;
     }
 
+    private void ScheduleNormalBoundsCache()
+    {
+        Dispatcher.UIThread.Post(CacheNormalBounds, DispatcherPriority.Background);
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
         if (DataContext is MainViewModel disposableViewModel)
@@ -138,7 +150,6 @@ public partial class MainWindow : Window
             disposableViewModel.Dispose();
         }
 
-        CacheNormalBounds();
         var settings = _settingsSession.Current;
         settings.DetailsPaneWidth = _detailsPaneWidth;
         if (_normalWidth >= MinWidth && _normalHeight >= MinHeight)
@@ -290,16 +301,16 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnContextMenuOpened(object? sender, RoutedEventArgs e)
+    private void OnMenuFlyoutOpened(object? sender, EventArgs e)
     {
-        if (sender is not ContextMenu contextMenu)
+        if (sender is not MenuFlyout menuFlyout)
         {
             return;
         }
 
         var settings = _settingsSession.Current;
         var localizer = new ResourceLocalizer(CultureInfo.GetCultureInfo(settings.Language == "ja" ? "ja" : "en"));
-        foreach (var menuItem in contextMenu.Items.OfType<MenuItem>())
+        foreach (var menuItem in menuFlyout.Items.OfType<MenuItem>())
         {
             if (menuItem.Tag is not string tag)
             {
@@ -308,7 +319,7 @@ public partial class MainWindow : Window
 
             if (tag is "viewer" or "editor")
             {
-                if (contextMenu.DataContext is not MediaItemViewModel mediaItem)
+                if (menuItem.DataContext is not MediaItemViewModel mediaItem)
                 {
                     menuItem.IsEnabled = false;
                     continue;

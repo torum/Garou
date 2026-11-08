@@ -3,16 +3,19 @@
         xmlns:vm="using:Garou.ViewModels"
         x:Class="Garou.Views.SettingsWindow"
         x:DataType="vm:MainViewModel"
-        Width="560" Height="660" MinWidth="480" MinHeight="520"
+        Width="560" Height="700" MinWidth="480" MinHeight="520"
         WindowStartupLocation="CenterOwner"
         Title="{Binding Settings.SettingsTitle}">
     <Grid RowDefinitions="Auto,*,Auto" Margin="24" RowSpacing="16">
         <StackPanel Grid.Row="0" Spacing="12">
             <TextBlock Text="{Binding Settings.SettingsTitle}" FontSize="22" FontWeight="SemiBold" />
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16" VerticalAlignment="Center">
-                <TextBlock Grid.Column="0" Text="{Binding Settings.LanguageLabel}" VerticalAlignment="Center" />
-                <ComboBox Grid.Column="1" ItemsSource="{Binding Settings.SupportedLanguages}"
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="8">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Settings.LanguageLabel}" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Settings.SupportedLanguages}"
                           SelectedItem="{Binding Settings.SelectedLanguage, Mode=TwoWay}" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Settings.ThemeLabel}" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Settings.ThemeOptions}"
+                          SelectedIndex="{Binding Settings.SelectedThemeIndex, Mode=TwoWay}" />
             </Grid>
         </StackPanel>
 

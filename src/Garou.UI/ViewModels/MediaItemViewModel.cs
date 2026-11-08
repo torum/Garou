@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
 using Garou.Domain.Models;
@@ -7,11 +9,12 @@ using System.Globalization;
 
 namespace Garou.ViewModels;
 
-public sealed class MediaItemViewModel : IDisposable
+public sealed class MediaItemViewModel : ObservableObject, IDisposable
 {
     private static readonly string[] FileSizeUnits = ["B", "KB", "MB", "GB", "TB", "PB", "EB"];
 
     private ThumbnailImage? _thumbnail;
+    private ThumbnailLoadState _thumbnailState = ThumbnailLoadState.Pending;
     private bool _isDisposed;
 
     public MediaItemViewModel(MediaFile file)
@@ -28,9 +31,39 @@ public sealed class MediaItemViewModel : IDisposable
             if (_thumbnail is null && !_isDisposed && File.ThumbnailPath is { } thumbnailPath && System.IO.File.Exists(thumbnailPath))
             {
                 _thumbnail = new ThumbnailImage(thumbnailPath);
+                _thumbnail.PropertyChanged += OnThumbnailPropertyChanged;
+                SetThumbnailState(_thumbnail.State);
             }
 
             return _thumbnail;
+        }
+    }
+
+    public ThumbnailLoadState ThumbnailState => _thumbnailState;
+
+    public bool IsThumbnailPlaceholderVisible => ThumbnailState is ThumbnailLoadState.Pending or ThumbnailLoadState.Loading;
+
+    public bool IsThumbnailImageVisible => ThumbnailState == ThumbnailLoadState.Loaded;
+
+    public bool IsThumbnailFailureVisible => ThumbnailState == ThumbnailLoadState.Failed;
+
+    internal void SetThumbnailState(ThumbnailLoadState state)
+    {
+        if (_isDisposed || !SetProperty(ref _thumbnailState, state, nameof(ThumbnailState)))
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(IsThumbnailPlaceholderVisible));
+        OnPropertyChanged(nameof(IsThumbnailImageVisible));
+        OnPropertyChanged(nameof(IsThumbnailFailureVisible));
+    }
+
+    private void OnThumbnailPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
+    {
+        if (eventArgs.PropertyName == nameof(ThumbnailImage.State) && sender is ThumbnailImage thumbnail)
+        {
+            SetThumbnailState(thumbnail.State);
         }
     }
 
@@ -99,6 +132,11 @@ public sealed class MediaItemViewModel : IDisposable
     public void Dispose()
     {
         _isDisposed = true;
+        if (_thumbnail is not null)
+        {
+            _thumbnail.PropertyChanged -= OnThumbnailPropertyChanged;
+        }
+
         _thumbnail?.Dispose();
         _thumbnail = null;
     }

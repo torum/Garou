@@ -38,6 +38,7 @@ public sealed class SettingsStore(string settingsFilePath)
                 Language = root?.Element("Language")?.Value is { Length: > 0 } language
                     ? language
                     : DetectLanguage(CultureInfo.CurrentUICulture),
+                ThemePreference = ReadThemePreference(root),
                 ThumbnailCacheLimitBytes = long.TryParse(root?.Element("ThumbnailCacheLimitBytes")?.Value, out var limit)
                     ? limit
                     : new AppSettings().ThumbnailCacheLimitBytes,
@@ -126,6 +127,7 @@ public sealed class SettingsStore(string settingsFilePath)
             var document = new XDocument(
                 new XElement("Settings",
                     new XElement("Language", settings.Language),
+                    new XElement("ThemePreference", NormalizeThemePreference(settings.ThemePreference)),
                     new XElement("ThumbnailCacheLimitBytes", settings.ThumbnailCacheLimitBytes),
                     new XElement("IncludedExtensions", settings.IncludedExtensions.Select(extension => new XElement("Extension", extension))),
                     new XElement("SelectedFolderId", settings.SelectedFolderId?.ToString("N") ?? string.Empty),
@@ -183,4 +185,16 @@ public sealed class SettingsStore(string settingsFilePath)
 
         return extensions;
     }
+
+    private static string ReadThemePreference(XElement? root)
+    {
+        return NormalizeThemePreference(root?.Element("ThemePreference")?.Value);
+    }
+
+    private static string NormalizeThemePreference(string? themePreference) => themePreference?.ToLowerInvariant() switch
+    {
+        "light" => "Light",
+        "dark" => "Dark",
+        _ => "Default"
+    };
 }

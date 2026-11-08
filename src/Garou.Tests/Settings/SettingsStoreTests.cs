@@ -39,6 +39,31 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(123L, loaded.ThumbnailCacheLimitBytes);
     }
 
+    [Theory]
+    [InlineData("Default")]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    public async Task WhenThemePreferenceIsSavedThenItIsRestored(string themePreference)
+    {
+        var store = new SettingsStore(_settingsPath);
+        await store.SaveAsync(new AppSettings { ThemePreference = themePreference }, CancellationToken.None);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(themePreference, loaded.ThemePreference);
+    }
+
+    [Fact]
+    public async Task WhenThemePreferenceIsInvalidThenSystemDefaultIsUsed()
+    {
+        await File.WriteAllTextAsync(_settingsPath, "<Settings><ThemePreference>Unknown</ThemePreference></Settings>", TestContext.Current.CancellationToken);
+        var store = new SettingsStore(_settingsPath);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal("Default", loaded.ThemePreference);
+    }
+
     [Fact]
     public async Task WhenIncludedExtensionsAreSavedThenTheyAreRestored()
     {
