@@ -78,6 +78,7 @@ public class VirtualizingUniformPanel : VirtualizingPanel
         InvalidateMeasure();
     }
 
+
     protected override Size MeasureOverride(Size availableSize)
     {
         var items = Items;

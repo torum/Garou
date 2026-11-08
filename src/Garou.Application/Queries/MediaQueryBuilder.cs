@@ -117,6 +117,26 @@ public static class MediaQueryBuilder
         return new BuiltQuery(sql, parameters);
     }
 
+    public static BuiltQuery BuildAll(MediaQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var (conditions, parameters) = BuildFilter(query);
+        var orderBy = query.SortField == MediaSortField.Id
+            ? $"Id {(query.Descending ? "DESC" : "ASC")}"
+            : $"{SortColumns[query.SortField]} {(query.Descending ? "DESC" : "ASC")}, Id ASC";
+
+        var sql = $"""
+            SELECT Id, Path, FileName, Extension, MediaType, FileSize, HashValue, ThumbnailPath,
+                   CreatedDateUtc, ModifiedDateUtc, LastIndexedUtc, FolderId
+            FROM MediaFile
+            WHERE {string.Join(" AND ", conditions.DefaultIfEmpty("1 = 1"))}
+            ORDER BY {orderBy};
+            """;
+
+        return new BuiltQuery(sql, parameters);
+    }
+
     public static BuiltQuery Build(MediaQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);

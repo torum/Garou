@@ -71,6 +71,15 @@ public sealed class SettingsStore(string settingsFilePath)
                 IncludeDescendants = bool.TryParse(root?.Element("IncludeDescendants")?.Value, out var includeDescendants)
                     ? includeDescendants
                     : new AppSettings().IncludeDescendants,
+                IncludeImages = bool.TryParse(root?.Element("IncludeImages")?.Value, out var includeImages)
+                    ? includeImages
+                    : new AppSettings().IncludeImages,
+                IncludeVideos = bool.TryParse(root?.Element("IncludeVideos")?.Value, out var includeVideos)
+                    ? includeVideos
+                    : new AppSettings().IncludeVideos,
+                IncludeAudio = bool.TryParse(root?.Element("IncludeAudio")?.Value, out var includeAudio)
+                    ? includeAudio
+                    : new AppSettings().IncludeAudio,
                 ScanSubfolders = bool.TryParse(root?.Element("ScanSubfolders")?.Value, out var scanSubfolders)
                     ? scanSubfolders
                     : new AppSettings().ScanSubfolders,
@@ -128,6 +137,9 @@ public sealed class SettingsStore(string settingsFilePath)
                     new XElement("ShowFileNames", settings.ShowFileNames.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ShowFileTypeBadges", settings.ShowFileTypeBadges.ToString(CultureInfo.InvariantCulture)),
                     new XElement("IncludeDescendants", settings.IncludeDescendants.ToString(CultureInfo.InvariantCulture)),
+                    new XElement("IncludeImages", settings.IncludeImages.ToString(CultureInfo.InvariantCulture)),
+                    new XElement("IncludeVideos", settings.IncludeVideos.ToString(CultureInfo.InvariantCulture)),
+                    new XElement("IncludeAudio", settings.IncludeAudio.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ScanSubfolders", settings.ScanSubfolders.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ImageViewerApplicationPath", settings.ImageViewerApplicationPath),
                     new XElement("ImageEditorApplicationPath", settings.ImageEditorApplicationPath),

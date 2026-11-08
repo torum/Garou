@@ -23,7 +23,6 @@ namespace Garou.Views;
 
 public partial class MainWindow : Window
 {
-    private static readonly double LoadMoreThresholdPixels = 400;
     private readonly AppSettingsSession _settingsSession;
     private VirtualizingUniformPanel? _mediaPanel;
     private double _normalWidth;
@@ -42,7 +41,6 @@ public partial class MainWindow : Window
         MediaListBox.AddHandler(InputElement.KeyDownEvent, OnMediaListKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         LeftPaneGridSplitter.AddHandler(InputElement.PointerReleasedEvent, OnGridSplitterPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
         DetailsPaneGridSplitter.AddHandler(InputElement.PointerReleasedEvent, OnDetailsPaneGridSplitterPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
-        MediaListBox.AddHandler(ScrollViewer.ScrollChangedEvent, OnMediaListScrollChanged);
         Loaded += OnLoaded;
         ScalingChanged += OnScalingChanged;
         PositionChanged += (_, _) => CacheNormalBounds();
@@ -180,24 +178,6 @@ public partial class MainWindow : Window
         if (DataContext is MainViewModel viewModel)
         {
             viewModel.OnVisibleItemsChanged(items.OfType<MediaItemViewModel>().Select(item => item.File).ToList());
-        }
-    }
-
-    private void OnMediaListScrollChanged(object? sender, ScrollChangedEventArgs e)
-    {
-        if (e.Source is not ScrollViewer scrollViewer || DataContext is not MainViewModel viewModel)
-        {
-            return;
-        }
-
-        if (scrollViewer.Offset.Y + scrollViewer.Viewport.Height < scrollViewer.Extent.Height - LoadMoreThresholdPixels)
-        {
-            return;
-        }
-
-        if (viewModel.LoadMoreCommand.CanExecute(null))
-        {
-            viewModel.LoadMoreCommand.Execute(null);
         }
     }
 

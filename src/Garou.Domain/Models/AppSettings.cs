@@ -26,6 +26,12 @@ public sealed class AppSettings
 
     public bool IncludeDescendants { get; set; } = true;
 
+    public bool IncludeImages { get; set; } = true;
+
+    public bool IncludeVideos { get; set; } = true;
+
+    public bool IncludeAudio { get; set; } = true;
+
     public bool ScanSubfolders { get; set; } = true;
 
     public string ImageViewerApplicationPath { get; set; } = string.Empty;

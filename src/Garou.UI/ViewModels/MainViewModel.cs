@@ -22,7 +22,6 @@ public partial class MainViewModel(
     IFolderRepository folders,
     IMetadataExtractionService metadataExtraction) : ObservableObject, IDisposable
 {
-    private const int PageSize = 200;
     private const int SearchDebounceMilliseconds = 300;
     private const int ThumbnailRegenerationDelayMilliseconds = 300;
     private const double MinThumbnailSize = 80;
@@ -33,9 +32,6 @@ public partial class MainViewModel(
     private double _renderScaling = 1;
     private const double MinLeftPaneWidth = 180;
     private const double MaxLeftPaneWidth = 500;
-    private Guid _nextAfterId;
-    private bool _hasMoreItems;
-    private bool _isLoadingMore;
     private readonly SemaphoreSlim _mediaLoadSemaphore = new(1, 1);
     private Guid? _selectedFolderId;
     private CancellationTokenSource? _reloadCts;
@@ -152,6 +148,7 @@ public partial class MainViewModel(
 
     private void OnMediaTypeFilterChanged()
     {
+        UpdateSettingsSession();
         if (!_isInitializing)
         {
             ScheduleReload(0);
@@ -520,6 +517,9 @@ public partial class MainViewModel(
         ShowFileNames = appSettings.ShowFileNames;
         ShowFileTypeBadges = appSettings.ShowFileTypeBadges;
         IncludeDescendants = appSettings.IncludeDescendants;
+        IncludeImages = appSettings.IncludeImages;
+        IncludeVideos = appSettings.IncludeVideos;
+        IncludeAudio = appSettings.IncludeAudio;
         ThumbnailSize = Math.Clamp(appSettings.ThumbnailSize, MinThumbnailSize, MaxThumbnailSize);
         LeftPaneWidth = Math.Clamp(appSettings.LeftPaneWidth, MinLeftPaneWidth, MaxLeftPaneWidth);
         await LoadFolderTreeAsync(cancellationToken);
@@ -983,35 +983,8 @@ public partial class MainViewModel(
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanLoadMore))]
-    public async Task LoadMoreAsync(CancellationToken cancellationToken)
-    {
-        await _mediaLoadSemaphore.WaitAsync(cancellationToken);
-        try
-        {
-            if (!_hasMoreItems || _selectedFolderId is not { } folderId)
-            {
-                return;
-            }
-
-            _isLoadingMore = true;
-            LoadMoreCommand.NotifyCanExecuteChanged();
-            _hasMoreItems = await LoadNextPageAsync(folderId, cancellationToken);
-        }
-        finally
-        {
-            _isLoadingMore = false;
-            _mediaLoadSemaphore.Release();
-            LoadMoreCommand.NotifyCanExecuteChanged();
-        }
-    }
-
-    private bool CanLoadMore() => _hasMoreItems && !_isLoadingMore;
-
     private void ScheduleReload(int delayMilliseconds)
     {
-        _hasMoreItems = false;
-        LoadMoreCommand.NotifyCanExecuteChanged();
         _reloadCts?.Cancel();
         _reloadCts = new CancellationTokenSource();
         _ = ReloadAfterDelayAsync(delayMilliseconds, _reloadCts.Token);
@@ -1058,6 +1031,9 @@ public partial class MainViewModel(
         appSettings.ShowFileNames = ShowFileNames;
         appSettings.ShowFileTypeBadges = ShowFileTypeBadges;
         appSettings.IncludeDescendants = IncludeDescendants;
+        appSettings.IncludeImages = IncludeImages;
+        appSettings.IncludeVideos = IncludeVideos;
+        appSettings.IncludeAudio = IncludeAudio;
         appSettings.ThumbnailSize = ThumbnailSize;
         appSettings.LeftPaneWidth = Math.Clamp(LeftPaneWidth, MinLeftPaneWidth, MaxLeftPaneWidth);
     }
@@ -1075,35 +1051,24 @@ public partial class MainViewModel(
             }
 
             _items.ReplaceAll([]);
-            _nextAfterId = Guid.Empty;
-            _hasMoreItems = false;
-            LoadMoreCommand.NotifyCanExecuteChanged();
             if (folderId is null)
             {
                 StatusText = "No library folder selected";
                 return;
             }
 
-            var selectedFolder = FindFolderNode(FolderTree, folderId.Value);
-            var shouldPaginate = IncludeDescendants && selectedFolder?.Children.Count > 0;
-            var hasMore = await LoadNextPageAsync(folderId, cancellationToken);
-            while (!shouldPaginate && hasMore)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                hasMore = await LoadNextPageAsync(folderId, cancellationToken);
-            }
+            var files = await queries.SearchAllAsync(CreateQuery(folderId), cancellationToken);
+            _items.ReplaceAll(files
+                .OrderBy(file => file.FileName, LogicalFileNameComparer.Instance)
+                .Select(file => new MediaItemViewModel(file))
+                .ToArray());
 
-            _hasMoreItems = shouldPaginate && hasMore;
-            LoadMoreCommand.NotifyCanExecuteChanged();
-
-            var fileCount = await queries.CountAsync(CreateQuery(folderId, afterId: Guid.Empty), cancellationToken);
             var folderCount = CountFolders(folderId);
-            StatusText = $"{fileCount} files, {folderCount} folders";
+            StatusText = $"{Items.Count} files, {folderCount} folders";
         }
         finally
         {
             _mediaLoadSemaphore.Release();
-            LoadMoreCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -1126,54 +1091,13 @@ public partial class MainViewModel(
     private static int CountDescendantFolders(IEnumerable<FolderNode> nodes) =>
         nodes.Sum(node => 1 + CountDescendantFolders(node.Children));
 
-    private MediaQuery CreateQuery(Guid? folderId, Guid afterId) => new(
+    private MediaQuery CreateQuery(Guid? folderId) => new(
         FolderId: folderId,
         SearchText: string.IsNullOrWhiteSpace(SearchText) ? null : SearchText,
         MediaType: SelectedMediaTypeFilter,
         SortField: MediaSortField.Id,
         Descending: false,
-        AfterId: afterId,
-        PageSize: PageSize,
+        AfterId: Guid.Empty,
+        PageSize: 0,
         IncludeDescendants: IncludeDescendants);
-
-    private async Task<bool> LoadNextPageAsync(Guid? folderId, CancellationToken cancellationToken)
-    {
-        var page = await queries.SearchPageAsync(CreateQuery(folderId, _nextAfterId), cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var newItems = page.Items
-            .OrderBy(item => item.FileName, LogicalFileNameComparer.Instance)
-            .Select(item => new MediaItemViewModel(item))
-            .ToArray();
-        var mergedItems = new List<MediaItemViewModel>(Items.Count + newItems.Length);
-        var existingIndex = 0;
-        var newIndex = 0;
-        while (existingIndex < Items.Count && newIndex < newItems.Length)
-        {
-            if (LogicalFileNameComparer.Instance.Compare(Items[existingIndex].FileName, newItems[newIndex].FileName) <= 0)
-            {
-                mergedItems.Add(Items[existingIndex++]);
-            }
-            else
-            {
-                mergedItems.Add(newItems[newIndex++]);
-            }
-        }
-
-        while (existingIndex < Items.Count)
-        {
-            mergedItems.Add(Items[existingIndex++]);
-        }
-
-        while (newIndex < newItems.Length)
-        {
-            mergedItems.Add(newItems[newIndex++]);
-        }
-
-        _items.ReplaceAll(mergedItems);
-        Log($"Page loaded: returned={page.Items.Count} total={Items.Count} afterId={_nextAfterId} nextAfterId={page.NextAfterId?.ToString() ?? "none"}");
-        _nextAfterId = page.NextAfterId ?? _nextAfterId;
-        return page.Items.Count == PageSize;
-    }
-
 }

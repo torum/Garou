@@ -36,6 +36,11 @@ public sealed class MediaQueryService(
         return new MediaPage(items, items.Count > 0 ? items[^1].Id : null);
     }
 
+    public Task<IReadOnlyList<MediaFile>> SearchAllAsync(MediaQuery query, CancellationToken cancellationToken)
+    {
+        return mediaSearch.SearchAsync(MediaQueryBuilder.BuildAll(query), cancellationToken);
+    }
+
     public Task<long> CountAsync(MediaQuery query, CancellationToken cancellationToken)
     {
         return mediaSearch.CountAsync(MediaQueryBuilder.BuildCount(query), cancellationToken);

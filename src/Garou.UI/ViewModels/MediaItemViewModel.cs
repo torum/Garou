@@ -11,17 +11,28 @@ public sealed class MediaItemViewModel : IDisposable
 {
     private static readonly string[] FileSizeUnits = ["B", "KB", "MB", "GB", "TB", "PB", "EB"];
 
+    private ThumbnailImage? _thumbnail;
+    private bool _isDisposed;
+
     public MediaItemViewModel(MediaFile file)
     {
         File = file;
-        Thumbnail = file.ThumbnailPath is { } thumbnailPath && System.IO.File.Exists(thumbnailPath)
-            ? new ThumbnailImage(thumbnailPath)
-            : null;
     }
 
     public MediaFile File { get; }
 
-    public ThumbnailImage? Thumbnail { get; }
+    public ThumbnailImage? Thumbnail
+    {
+        get
+        {
+            if (_thumbnail is null && !_isDisposed && File.ThumbnailPath is { } thumbnailPath && System.IO.File.Exists(thumbnailPath))
+            {
+                _thumbnail = new ThumbnailImage(thumbnailPath);
+            }
+
+            return _thumbnail;
+        }
+    }
 
     public ObservableCollection<MediaMetadataTag> DetailedTags { get; } = [];
 
@@ -85,5 +96,10 @@ public sealed class MediaItemViewModel : IDisposable
 
     private static string FormatText(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
 
-    public void Dispose() => Thumbnail?.Dispose();
+    public void Dispose()
+    {
+        _isDisposed = true;
+        _thumbnail?.Dispose();
+        _thumbnail = null;
+    }
 }

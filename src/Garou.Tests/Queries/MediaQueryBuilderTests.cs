@@ -15,6 +15,16 @@ public sealed class MediaQueryBuilderTests
     }
 
     [Fact]
+    public void WhenBuildingAllThenNoKeysetOrLimitIsApplied()
+    {
+        var built = MediaQueryBuilder.BuildAll(CreateQuery());
+
+        Assert.DoesNotContain("Id > $afterId", built.Sql);
+        Assert.DoesNotContain("LIMIT", built.Sql);
+        Assert.DoesNotContain("$pageSize", built.Sql);
+    }
+
+    [Fact]
     public void WhenFolderIdIsSetThenFolderFilterIsParameterized()
     {
         var folderId = Guid.CreateVersion7();
