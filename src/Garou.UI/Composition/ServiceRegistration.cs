@@ -61,8 +61,8 @@ public static class ServiceRegistration
         services.AddSingleton<IMediaSearchRepository, MediaFileRepository>();
         services.AddSingleton<MediaQueryService>();
         services.AddSingleton<IndexChangeEventBus>();
-        services.AddTransient<Garou.ViewModels.MainViewModel>();
-        services.AddTransient<Garou.ViewModels.SettingsViewModel>();
+        services.AddSingleton<Garou.ViewModels.MainViewModel>();
+        services.AddSingleton<Garou.ViewModels.SettingsViewModel>();
 
         services.AddSingleton<IFileWatcherService, FileWatcherService>();
         services.AddSingleton<IMediaMetadataProvider, ImageMetadataProvider>();

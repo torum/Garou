@@ -70,7 +70,7 @@ public partial class MainViewModel(
     public SettingsViewModel Settings { get; } = settings;
 
     [ObservableProperty]
-    public partial bool IsDetailsPaneOpen { get; set; } = true;
+    public partial bool IsDetailsPaneOpen { get; set; } = false;
 
     [ObservableProperty]
     public partial bool ShowFileNames { get; set; } = true;
@@ -236,6 +236,7 @@ public partial class MainViewModel(
         catch (Exception exception)
         {
             StatusText = $"Could not remove {folderNode.PathText}: {exception.Message}";
+            ReportError(StatusText);
             Log(StatusText);
         }
     }
@@ -303,8 +304,32 @@ public partial class MainViewModel(
     [ObservableProperty]
     public partial FolderNode? SelectedFolder { get; set; }
 
+    public IReadOnlyList<FolderBreadcrumb> SelectedFolderBreadcrumbs { get; private set; } = [];
+
     [ObservableProperty]
     public partial MediaItemViewModel? SelectedItem { get; set; }
+
+    public void NavigateToBreadcrumb(FolderBreadcrumb breadcrumb)
+    {
+        var node = FindFolderNodeByPath(FolderTree, breadcrumb.Path);
+        if (node is not null)
+        {
+            SelectedFolder = node;
+        }
+    }
+
+    private static IReadOnlyList<FolderBreadcrumb> BuildBreadcrumbs(string? path)
+    {
+        var breadcrumbs = new List<FolderBreadcrumb>();
+        for (var current = path; !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
+        {
+            var title = Path.GetFileName(current);
+            breadcrumbs.Add(new FolderBreadcrumb(string.IsNullOrEmpty(title) ? current : title, current));
+        }
+
+        breadcrumbs.Reverse();
+        return breadcrumbs;
+    }
 
     public async Task LoadSelectedMetadataAsync()
     {
@@ -336,7 +361,9 @@ public partial class MainViewModel(
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[MainViewModel] Metadata extraction failed for '{selectedItem.File.Path}': {ex.Message}");
+            var message = $"Metadata extraction failed for '{selectedItem.File.Path}': {ex.Message}";
+            ReportError(message);
+            Debug.WriteLine($"[MainViewModel] {message}");
         }
         finally
         {
@@ -393,6 +420,18 @@ public partial class MainViewModel(
     public partial string ScanStatusText { get; set; } = string.Empty;
 
     [ObservableProperty]
+    public partial string ThumbnailStatusText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string InfoBarErrorTitle { get; set; } = "Error";
+
+    [ObservableProperty]
+    public partial string InfoBarErrorMessage { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool IsInfoBarOpen { get; set; }
+
+    [ObservableProperty]
     public partial double ScanProgressPercent { get; set; }
 
     [ObservableProperty]
@@ -407,6 +446,16 @@ public partial class MainViewModel(
     public event Action<FolderNode?>? FolderRestored;
 
     public HashSet<Guid> ExpandedFolderIds { get; } = [];
+
+    /// <summary>Opens the error InfoBar with the supplied message.</summary>
+    public void ReportError(string message)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+        InfoBarErrorTitle = Settings.ErrorTitle;
+        InfoBarErrorMessage = message;
+        IsInfoBarOpen = true;
+    }
 
     public async Task ClearFolderThumbnailCacheAsync(FolderNode folderNode, CancellationToken cancellationToken)
     {
@@ -463,12 +512,18 @@ public partial class MainViewModel(
             StatusText = failedFileCount == 0
                 ? $"Cleared {clearedCount} thumbnail(s) for {folderNode.PathText}"
                 : $"Cleared {clearedCount} thumbnail(s) for {folderNode.PathText}; could not delete files for {failedFileCount} item(s): {cleanupError}";
+            if (failedFileCount > 0)
+            {
+                ReportError(StatusText);
+            }
+
             Log(StatusText);
             RequestVisibleThumbnailRegeneration();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             StatusText = $"Could not clear thumbnail cache for {folderNode.PathText}: {exception.Message}";
+            ReportError(StatusText);
             Log(StatusText);
         }
     }
@@ -685,6 +740,7 @@ public partial class MainViewModel(
         catch (Exception exception)
         {
             StatusText = $"Thumbnail regeneration failed: {exception.Message}";
+            ReportError(StatusText);
             Log(StatusText);
         }
         finally
@@ -755,7 +811,7 @@ public partial class MainViewModel(
                 {
                     if (IsVisibleThumbnailVersionCurrent(observedVersion))
                     {
-                        StatusText = "Visible thumbnails are up to date";
+                        ThumbnailStatusText = string.Empty;
                         break;
                     }
 
@@ -780,15 +836,16 @@ public partial class MainViewModel(
 
                 if (IsVisibleThumbnailVersionCurrent(observedVersion))
                 {
-                    StatusText = "Finished generating visible thumbnails";
+                    ThumbnailStatusText = "Finished generating visible thumbnails";
                     break;
                 }
             }
         }
         catch (Exception exception)
         {
-            StatusText = $"Thumbnail regeneration failed: {exception.Message}";
-            Log(StatusText);
+            ThumbnailStatusText = $"Thumbnail regeneration failed: {exception.Message}";
+            ReportError(ThumbnailStatusText);
+            Log(ThumbnailStatusText);
         }
         finally
         {
@@ -843,7 +900,7 @@ public partial class MainViewModel(
                 break;
             }
 
-            StatusText = $"{progressVerb} thumbnail: {file.FileName}";
+            ThumbnailStatusText = $"Updating thumbnails: {progressVerb} {file.FileName}";
             SetThumbnailState(file.Id, ThumbnailLoadState.Loading);
 
             string? thumbnailPath;
@@ -904,6 +961,25 @@ public partial class MainViewModel(
             }
 
             var child = FindFolderNode(node.Children, folderId);
+            if (child is not null)
+            {
+                return child;
+            }
+        }
+
+        return null;
+    }
+
+    private static FolderNode? FindFolderNodeByPath(IEnumerable<FolderNode> nodes, string path)
+    {
+        foreach (var node in nodes)
+        {
+            if (string.Equals(node.PathText, path, StringComparison.OrdinalIgnoreCase))
+            {
+                return node;
+            }
+
+            var child = FindFolderNodeByPath(node.Children, path);
             if (child is not null)
             {
                 return child;
@@ -1006,6 +1082,8 @@ public partial class MainViewModel(
     {
         _selectedFolderId = value?.Folder.Id;
         Log($"Selection changed: folderId={_selectedFolderId?.ToString() ?? "none"}");
+        SelectedFolderBreadcrumbs = BuildBreadcrumbs(value?.PathText);
+        OnPropertyChanged(nameof(SelectedFolderBreadcrumbs));
         UpdateSettingsSession();
         if (!_suppressSelectedFolderReload)
         {
@@ -1034,6 +1112,7 @@ public partial class MainViewModel(
         catch (Exception exception)
         {
             StatusText = $"Failed to load media: {exception.Message}";
+            ReportError(StatusText);
         }
     }
 
@@ -1088,10 +1167,11 @@ public partial class MainViewModel(
             }
 
             var files = await queries.SearchAllAsync(CreateQuery(folderId), cancellationToken);
-            _items.ReplaceAll(files
+            var items = await Task.Run(() => files
                 .OrderBy(file => file.FileName, LogicalFileNameComparer.Instance)
                 .Select(file => new MediaItemViewModel(file))
-                .ToArray());
+                .ToArray(), cancellationToken);
+            _items.ReplaceAll(items);
 
             var folderCount = CountFolders(folderId);
             StatusText = $"{Items.Count} files, {folderCount} folders";

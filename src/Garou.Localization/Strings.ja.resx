@@ -187,4 +187,31 @@
   <data name="SelectAtLeastOneExtension" xml:space="preserve">
 	<value>少なくとも1つのファイル拡張子を選択してください。</value>
   </data>
+  <data name="TooltipOpenDetailsPane" xml:space="preserve">
+	<value>詳細ペインを開く</value>
+  </data>
+  <data name="TooltipAdjustThumbnailSize" xml:space="preserve">
+	<value>サムネイルのサイズを調整</value>
+  </data>
+  <data name="TooltipShowFilenames" xml:space="preserve">
+	<value>ファイル名を表示</value>
+  </data>
+  <data name="TooltipShowFileTypeBadges" xml:space="preserve">
+	<value>ファイル種別のバッジを表示</value>
+  </data>
+  <data name="TooltipIncludeSubfolders" xml:space="preserve">
+	<value>サブフォルダーを含める</value>
+  </data>
+  <data name="TooltipIncludeImages" xml:space="preserve">
+	<value>画像を含める</value>
+  </data>
+  <data name="TooltipIncludeVideos" xml:space="preserve">
+	<value>動画を含める</value>
+  </data>
+  <data name="TooltipIncludeAudio" xml:space="preserve">
+	<value>音声を含める</value>
+  </data>
+  <data name="ErrorTitle" xml:space="preserve">
+	<value>エラー</value>
+  </data>
 </root>

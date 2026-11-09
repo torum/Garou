@@ -22,10 +22,6 @@ namespace Garou
             System.Diagnostics.Debug.WriteLine($"Garou.UI starting with args: {string.Join(" ", args)}");
 
             var services = ServiceRegistration.Build();
-            services.GetRequiredService<DatabaseInitializer>()
-                .InitializeAsync(CancellationToken.None)
-                .GetAwaiter()
-                .GetResult();
             var settingsStore = services.GetRequiredService<SettingsStore>();
             var settingsSession = services.GetRequiredService<AppSettingsSession>();
             settingsSession.Initialize(settingsStore.LoadAsync(CancellationToken.None).GetAwaiter().GetResult());
@@ -33,11 +29,16 @@ namespace Garou
 
             var hostedServices = services.GetServices<IHostedService>().ToList();
             using var lifetime = new CancellationTokenSource();
-            foreach (var hostedService in hostedServices)
+            App.StartupTask = Task.Run(async () =>
             {
-                System.Diagnostics.Debug.WriteLine($"Garou.UI starting hosted service: {hostedService.GetType().Name}");
-                hostedService.StartAsync(lifetime.Token).GetAwaiter().GetResult();
-            }
+                await services.GetRequiredService<DatabaseInitializer>().InitializeAsync(lifetime.Token);
+
+                foreach (var hostedService in hostedServices)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Garou.UI starting hosted service: {hostedService.GetType().Name}");
+                    await hostedService.StartAsync(lifetime.Token);
+                }
+            }, lifetime.Token);
 
             try
             {
@@ -46,12 +47,19 @@ namespace Garou
             finally
             {
                 lifetime.Cancel();
-                foreach (var hostedService in hostedServices)
+                try
                 {
-                    hostedService.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    App.StartupTask.GetAwaiter().GetResult();
                 }
+                finally
+                {
+                    foreach (var hostedService in hostedServices)
+                    {
+                        hostedService.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    }
 
-                settingsStore.SaveAsync(settingsSession.Current, CancellationToken.None).GetAwaiter().GetResult();
+                    settingsStore.SaveAsync(settingsSession.Current, CancellationToken.None).GetAwaiter().GetResult();
+                }
             }
         }
 

@@ -1,17 +1,18 @@
 <Window xmlns="https://github.com/avaloniaui"
+        xmlns:controls="using:FluentAvalonia.UI.Controls"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Garou.ViewModels"
-        xmlns:vc="using:Garou.Views.Controls"
-        xmlns:domain="using:Garou.Domain.Entities"
-        xmlns:metadata="using:Garou.Domain.Models"
         xmlns:queries="using:Garou.Application.Queries"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ui="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia"
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="650"
-        xmlns:imaging="clr-namespace:Avalonia.Media.Imaging;assembly=Avalonia.Base"
-		xmlns:ia="using:Xaml.Behaviors.Interactions.Animated"
         x:Class="Garou.Views.MainWindow"
+        WindowDecorations="Full"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="Transparent"
         x:DataType="vm:MainViewModel"
+        x:CompileBindings="True"
         Icon="/Assets/avalonia-logo.ico"
         WindowStartupLocation="Manual"
         MinWidth="800" MinHeight="500"
@@ -39,16 +40,37 @@
 
     <Grid x:Name="MainLayoutGrid" RowDefinitions="*,Auto,Auto" ColumnDefinitions="260,Auto,*">
 
-        <Grid Grid.Row="0" Grid.Column="0" RowDefinitions="Auto,*">
+        <!-- TreeViewGrid -->
+        <Grid x:Name="TreeViewGrid" Grid.Row="0" Grid.Column="0" RowDefinitions="Auto,*">
 
-            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" VerticalAlignment="Center">
-                <TextBox Grid.Column="0" MinWidth="140" PlaceholderText="Search media" Text="{Binding SearchText}" />
-                <Button Grid.Column="1" ToolTip.Tip="Search" Command="{Binding SearchCommand}">
-                    <Path Width="18" Height="18" Data="{StaticResource SearchIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
-                </Button>
-            </Grid>
+            <Border Grid.Row="0" WindowDecorationProperties.ElementRole="TitleBar" Margin="0,4,0,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="Transparent">
+                <Grid ColumnDefinitions="*,Auto">
+                    <!-- App Icon and Title hide when x11 -->
+                    <StackPanel x:Name="AppTitle" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,18,0">
+                        <Image x:Name="ImageAppIcon" Width="16" Height="16" Margin="0,0,6,0" Stretch="Uniform" StretchDirection="DownOnly" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Garou" Opacity="0.9" FontWeight="SemiBold" Margin="0,0,0,1" VerticalAlignment="Center" HorizontalAlignment="Center"></TextBlock>
+                    </StackPanel>
+                    <!-- PaneHeader Buttons -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <!-- AddFolder button -->
+                        <Button Width="39" Height="36" Margin="6,0,6,0" Click="OnAddFolderClick" WindowDecorationProperties.ElementRole="User" HorizontalAlignment="Right" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" Padding="3" Opacity="0.7" Focusable="False">
+                            <Viewbox Width="14" Height="14">
+                                <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource FolderAddIcon}"></PathIcon>
+                            </Viewbox>
+                        </Button>
+                        <!-- Settings button -->
+                        <Button Opacity="0.7" Margin="3,0,4,0" WindowDecorationProperties.ElementRole="User" Click="OnSettingsClick" Width="39" Height="36" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding Settings.SettingsTitle}" BorderThickness="0" Background="Transparent">
+                            <Viewbox Width="14" Height="14" HorizontalAlignment="Center" VerticalAlignment="Bottom">
+                                <PathIcon Background="Transparent" Width="NaN" Height="NaN"
+                                          Data="M7.99994 6C6.89537 6 5.99994 6.89543 5.99994 8C5.99994 9.10457 6.89537 10 7.99994 10C9.10451 10 9.99994 9.10457 9.99994 8C9.99994 6.89543 9.10451 6 7.99994 6ZM6.99994 8C6.99994 7.44772 7.44765 7 7.99994 7C8.55222 7 8.99994 7.44772 8.99994 8C8.99994 8.55228 8.55222 9 7.99994 9C7.44765 9 6.99994 8.55228 6.99994 8ZM10.618 4.39833C10.233 4.46825 9.86392 4.21413 9.7937 3.83074L9.53397 2.41496C9.50816 2.27427 9.39961 2.16301 9.25912 2.13325C8.84818 2.04621 8.42685 2.00195 8 2.00195C7.57289 2.00195 7.1513 2.04627 6.74013 2.13341C6.5996 2.1632 6.49104 2.27452 6.46529 2.41527L6.20629 3.8308C6.1994 3.86844 6.18942 3.90551 6.17647 3.9416C6.04476 4.30859 5.6392 4.49978 5.27062 4.36863L3.91115 3.88463C3.77603 3.83652 3.62511 3.87431 3.52891 3.98033C2.96005 4.60729 2.52892 5.34708 2.2672 6.15302C2.22305 6.28899 2.26562 6.43805 2.37502 6.53053L3.47694 7.46206C3.50626 7.48685 3.53352 7.51399 3.55843 7.5432C3.81177 7.84027 3.77528 8.28558 3.47693 8.53783L2.37502 9.46935C2.26562 9.56183 2.22305 9.71089 2.2672 9.84685C2.52892 10.6528 2.96005 11.3926 3.52891 12.0196C3.62511 12.1256 3.77603 12.1634 3.91115 12.1153L5.27068 11.6312C5.30687 11.6184 5.3441 11.6084 5.38196 11.6015C5.76701 11.5316 6.13608 11.7857 6.2063 12.1691L6.46529 13.5846C6.49104 13.7254 6.5996 13.8367 6.74013 13.8665C7.1513 13.9536 7.57289 13.9979 8 13.9979C8.42685 13.9979 8.84818 13.9537 9.25912 13.8666C9.39961 13.8369 9.50816 13.7256 9.53397 13.5849L9.79368 12.1692C9.8006 12.1314 9.81058 12.0944 9.82353 12.0583C9.95524 11.6913 10.3608 11.5001 10.7294 11.6312L12.0888 12.1153C12.224 12.1634 12.3749 12.1256 12.4711 12.0196C13.04 11.3926 13.4711 10.6528 13.7328 9.84685C13.777 9.71089 13.7344 9.56183 13.625 9.46935L12.5231 8.53782C12.4937 8.51303 12.4665 8.48589 12.4416 8.45667C12.1882 8.1596 12.2247 7.71429 12.5231 7.46205L13.625 6.53053C13.7344 6.43805 13.777 6.28899 13.7328 6.15302C13.4711 5.34708 13.04 4.60729 12.4711 3.98033C12.3749 3.87431 12.224 3.83652 12.0888 3.88463L10.7293 4.36865C10.6931 4.38152 10.6559 4.39146 10.618 4.39833ZM3.99863 4.97726L4.93522 5.3107C5.82017 5.62559 6.79872 5.16815 7.11769 4.2794C7.14903 4.19207 7.17324 4.1021 7.18996 4.01078L7.36738 3.04113C7.5757 3.01512 7.78684 3.00195 8 3.00195C8.213 3.00195 8.42397 3.0151 8.63214 3.04107L8.81011 4.01117C8.98053 4.9408 9.87266 5.55003 10.7967 5.38225C10.8877 5.36572 10.9775 5.34176 11.0647 5.31073L12.0014 4.97726C12.2564 5.31084 12.4684 5.67476 12.6319 6.06064L11.8774 6.6984C11.1566 7.30787 11.0675 8.38649 11.6807 9.10555C11.7408 9.17609 11.8067 9.24166 11.8775 9.3015L12.6319 9.93924C12.4684 10.3251 12.2564 10.689 12.0014 11.0226L11.0646 10.6891C10.1797 10.3742 9.20128 10.8317 8.88231 11.7205C8.85096 11.8078 8.82677 11.8978 8.81004 11.9891L8.63214 12.9588C8.42397 12.9848 8.213 12.9979 8 12.9979C7.78684 12.9979 7.5757 12.9848 7.36738 12.9587L7.18994 11.989C7.01965 11.0592 6.12743 10.4498 5.2033 10.6176C5.11227 10.6342 5.0225 10.6581 4.93528 10.6892L3.99863 11.0226C3.74357 10.689 3.53161 10.3251 3.36814 9.93924L4.12257 9.30148C4.84343 8.69201 4.93254 7.61339 4.31933 6.89433C4.25917 6.82378 4.19332 6.75822 4.12254 6.69838L3.36814 6.06064C3.53161 5.67476 3.74357 5.31084 3.99863 4.97726Z">
+                                </PathIcon>
+                            </Viewbox>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
 
-            <TreeView x:Name="FolderTreeView" Grid.Row="1" ItemsSource="{Binding FolderTree}" SelectedItem="{Binding SelectedFolder, Mode=TwoWay}" AutoScrollToSelectedItem="False" Margin="0" SelectionChanged="OnFolderSelectionChanged" TreeViewItem.Expanded="OnTreeItemExpandedChanged" TreeViewItem.Collapsed="OnTreeItemExpandedChanged" ScrollViewer.AllowAutoHide="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <TreeView x:Name="FolderTreeView" Grid.Row="1" ItemsSource="{Binding FolderTree}" SelectedItem="{Binding SelectedFolder, Mode=TwoWay}" AutoScrollToSelectedItem="False" Margin="0,6,0,0" TreeViewItem.Expanded="OnTreeItemExpandedChanged" TreeViewItem.Collapsed="OnTreeItemExpandedChanged" ScrollViewer.AllowAutoHide="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <TreeView.ItemTemplate>
                     <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="queries:FolderNode">
                         <Grid ColumnDefinitions="*" Background="Transparent" ToolTip.Tip="{Binding PathText}">
@@ -64,335 +86,45 @@
 
                     </TreeDataTemplate>
                 </TreeView.ItemTemplate>
-			<TreeView.Styles>
-				<Style Selector="TreeViewItem">
-					<Setter Property="Padding" Value="8"/>
-					<Setter Property="Margin" Value="0"/>
-				</Style>
-			</TreeView.Styles>
+                <TreeView.Styles>
+                    <Style Selector="TreeViewItem">
+                        <Setter Property="Padding" Value="8"/>
+                        <Setter Property="Margin" Value="0"/>
+                    </Style>
+                </TreeView.Styles>
             </TreeView>
 
         </Grid>
 
         <GridSplitter x:Name="LeftPaneGridSplitter" Grid.Row="0" Grid.Column="1" ResizeDirection="Columns" Width="5" Background="Transparent" />
 
-        <Grid x:Name="MediaDetailsGrid" Grid.Row="0" Grid.Column="2" ColumnDefinitions="*,Auto,280">
-            <Border Grid.Column="2" IsVisible="{Binding IsDetailsPaneOpen}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="16" Spacing="8" DataContext="{Binding SelectedItem}" x:DataType="vm:MediaItemViewModel">
-                        <SelectableTextBlock Text="{Binding FileName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <SelectableTextBlock Text="{Binding File.Path}" Opacity="0.75" TextWrapping="Wrap" />
-                        <Separator Margin="0,8" />
-                        <Grid ColumnDefinitions="96,8,*">
-                            <SelectableTextBlock Text="ID" Opacity="0.65" />
-                            <SelectableTextBlock Grid.Column="2" Text="{Binding IdText}" TextWrapping="Wrap" />
-                        </Grid>
-                        <Grid ColumnDefinitions="96,8,*">
-                            <SelectableTextBlock Text="Type" Opacity="0.65" />
-                            <SelectableTextBlock Grid.Column="2" Text="{Binding MediaTypeText}" TextWrapping="Wrap" />
-                        </Grid>
-                        <Grid ColumnDefinitions="96,8,*">
-                            <SelectableTextBlock Text="Extension" Opacity="0.65" />
-                            <SelectableTextBlock Grid.Column="2" Text="{Binding ExtensionText}" TextWrapping="Wrap" />
-                        </Grid>
-                        <Grid ColumnDefinitions="96,8,*">
-                            <SelectableTextBlock Text="Size" Opacity="0.65" />
-                            <SelectableTextBlock Grid.Column="2" Text="{Binding FileSizeText}" TextWrapping="Wrap" />
-                        </Grid>
-                        <StackPanel Spacing="8" IsVisible="{Binding ShowsDetailedMetadata}">
-                            <Separator Margin="0,8" />
-                            <SelectableTextBlock Text="Media metadata" FontWeight="SemiBold" />
-                            <ItemsControl ItemsSource="{Binding DetailedTags}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="metadata:MediaMetadataTag">
-                                        <StackPanel Spacing="2" Margin="0,0,0,6">
-                                            <SelectableTextBlock Text="{Binding Category}" FontSize="11" Opacity="0.65" />
-                                            <SelectableTextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                            <SelectableTextBlock Text="{Binding Value}" TextWrapping="Wrap" />
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                        <Grid ColumnDefinitions="96,8,*">
-                            <SelectableTextBlock Text="Hash" Opacity="0.65" />
-                            <SelectableTextBlock Grid.Column="2" Text="{Binding HashText}" TextWrapping="Wrap" />
-                        </Grid>
-                        <Grid ColumnDefinitions="96,8,*">
-                            <SelectableTextBlock Text="Created" Opacity="0.65" />
-                            <SelectableTextBlock Grid.Column="2" Text="{Binding CreatedDateText}" TextWrapping="Wrap" />
-                        </Grid>
-                        <Grid ColumnDefinitions="96,8,*">
-                            <SelectableTextBlock Text="Modified" Opacity="0.65" />
-                            <SelectableTextBlock Grid.Column="2" Text="{Binding ModifiedDateText}" TextWrapping="Wrap" />
-                        </Grid>
-                        <Grid ColumnDefinitions="96,8,*">
-                            <SelectableTextBlock Text="Indexed" Opacity="0.65" />
-                            <SelectableTextBlock Grid.Column="2" Text="{Binding LastIndexedDateText}" TextWrapping="Wrap" />
-                        </Grid>
-                        <Grid ColumnDefinitions="96,8,*">
-                            <SelectableTextBlock Text="Folder ID" Opacity="0.65" />
-                            <SelectableTextBlock Grid.Column="2" Text="{Binding FolderIdText}" TextWrapping="Wrap" />
-                        </Grid>
-                        <Grid ColumnDefinitions="96,8,*">
-                            <SelectableTextBlock Text="Thumbnail" Opacity="0.65" />
-                            <SelectableTextBlock Grid.Column="2" Text="{Binding ThumbnailPathText}" TextWrapping="Wrap" />
-                        </Grid>
-                    </StackPanel>
-                </ScrollViewer>
-            </Border>
-            <GridSplitter x:Name="DetailsPaneGridSplitter" Grid.Column="1" ResizeDirection="Columns" Width="5" IsVisible="{Binding IsDetailsPaneOpen}" Background="Transparent" />
-                <!-- Keep SelectionChanged wired for generalized on-demand metadata loading -->
-                <ListBox Grid.Column="0" x:Name="MediaListBox" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" SelectionChanged="OnMediaSelectionChanged" Margin="0,0,0,0" Padding="0,8,0,0" DoubleTapped="OnMediaDoubleTapped" Theme="{DynamicResource {x:Type ListBox}}"
-                         Classes.hide-names="{Binding !ShowFileNames}"
-                         Classes.hide-badges="{Binding !ShowFileTypeBadges}">
-                    <ListBox.Styles>
-                        <Style Selector="ListBoxItem">
-                            <Setter Property="CornerRadius" Value="10" />
-                            <Setter Property="Padding" Value="2" />
-                        </Style>
-                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                            <Setter Property="Background" Value="transparent" />
-                            <Setter Property="BorderBrush" Value="transparent" />
-                        </Style>
-                        <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
-                            <Setter Property="Background" Value="#18808080" />
-                            <Setter Property="BorderBrush" Value="#55808080" />
-                        </Style>
-                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                            <Setter Property="Background" Value="#18808080" />
-                            <Setter Property="BorderBrush" Value="#55808080" />
-                        </Style>
-                        <Style Selector="ListBoxItem:pointerover">
-                            <Setter Property="Background" Value="transparent" />
-                            <Setter Property="BorderBrush" Value="transparent" />
-                        </Style>
-                        <Style Selector="ListBoxItem:selected">
-                            <Setter Property="Background" Value="#18808080" />
-                            <Setter Property="BorderBrush" Value="#55808080" />
-                        </Style>
-                        <Style Selector="ListBoxItem:selected:pointerover">
-                            <Setter Property="Background" Value="#18808080" />
-                            <Setter Property="BorderBrush" Value="#55808080" />
-                        </Style>
-                        <Style Selector="ListBox.hide-names TextBlock.media-title">
-                            <Setter Property="IsVisible" Value="False" />
-                        </Style>
-                        <Style Selector="ListBox.hide-badges Border.type-badge">
-                            <Setter Property="IsVisible" Value="False" />
-                        </Style>
-                        <Style Selector="Border#ClipBorder:pointerover">
-                            <Setter Property="RenderTransform" Value="Scale(1.05, 1.05)" />
-                        </Style>
-                        <Style Selector="ListBoxItem:selected /template/ Rectangle#SelectionIndicator">
-                            <Setter Property="IsVisible" Value="False" />
-                        </Style>
-                    </ListBox.Styles>
-                    <ListBox.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <vc:VirtualizingUniformPanel ItemWidth="{Binding ThumbnailTileWidth}" ItemHeight="{Binding ThumbnailTileHeight}" />
-                        </ItemsPanelTemplate>
-                    </ListBox.ItemsPanel>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="vm:MediaItemViewModel">
-                            <Border Margin="2" Padding="4" CornerRadius="8" Background="Transparent">
-                                <Border.ContextFlyout>
-                                    <MenuFlyout Opened="OnMenuFlyoutOpened">
-                                        <MenuItem Header="Open with default app" Tag="OpenWithDefaultApplication" InputGesture="Enter" Click="OnOpenWithDefaultApplicationClick" />
-                                        <Separator />
-                                        <MenuItem Header="Open with viewer" Tag="viewer" Click="OnLaunchWithViewerClick" />
-                                        <MenuItem Header="Open with editor" Tag="editor" Click="OnLaunchWithEditorClick" />
-                                        <MenuItem Header="Open containing folder" Tag="OpenContainingFolder" Click="OnOpenContainingFolderClick" />
-                                        <MenuItem Header="Open thumbnail cache folder" Tag="OpenThumbnailCacheFolder" Click="OnOpenThumbnailFolderClick" />
-                                    </MenuFlyout>
-                                </Border.ContextFlyout>
-                                <StackPanel Spacing="4">
-                                    <Grid Width="{Binding $parent[ListBox].DataContext.ThumbnailSize}" Height="{Binding $parent[ListBox].DataContext.ThumbnailSize}">
-                                        <Border CornerRadius="8" Effect="{StaticResource ThumbnailImageShadow}"> <!-- Effect costs a lot.  -->
-                                            <Border x:Name="ClipBorder" CornerRadius="8" ClipToBounds="True" Background="Transparent">
-                                                <Border.Transitions>
-                                                    <Transitions>
-                                                        <TransformOperationsTransition Property="RenderTransform" Duration="0:00:00.200" />
-                                                    </Transitions>
-                                                </Border.Transitions>
+        <!-- MediaListBoxFrameGrid -->
+        <Grid x:Name="MediaListBoxFrameGrid" Grid.Row="0" Grid.Column="2" RowDefinitions="*" Margin="0,40,0,0">
 
-                                                <Grid>
-                                                    <Viewbox Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsThumbnailPlaceholderVisible}">
-                                                        <Path Data="M10 3C6.13401 3 3 6.13401 3 10C3 10.2761 2.77614 10.5 2.5 10.5C2.22386 10.5 2 10.2761 2 10C2 5.58172 5.58172 2 10 2C14.4183 2 18 5.58172 18 10C18 14.4183 14.4183 18 10 18C9.72386 18 9.5 17.7761 9.5 17.5C9.5 17.2239 9.72386 17 10 17C13.866 17 17 13.866 17 10C17 6.13401 13.866 3 10 3Z" Fill="#808080" />
-                                                    </Viewbox>
-                                                    <Viewbox Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsThumbnailFailureVisible}">
-                                                        <Path Data="M3.28034 2.21968C2.98745 1.92678 2.51257 1.92677 2.21968 2.21966C1.92678 2.51255 1.92677 2.98743 2.21966 3.28032L3.48326 4.54395C3.17684 5.03983 3 5.62426 3 6.25V17.75C3 19.5449 4.45507 21 6.25 21H17.75C18.3757 21 18.96 20.8232 19.4559 20.5169L20.7194 21.7805C21.0123 22.0734 21.4872 22.0734 21.7801 21.7805C22.073 21.4876 22.073 21.0127 21.7801 20.7198L3.28034 2.21968ZM11.1189 12.1797C10.8678 12.2864 10.6322 12.4409 10.4258 12.643L4.60326 18.3437C4.53643 18.1583 4.5 17.9584 4.5 17.75V6.25C4.5 6.0437 4.5357 5.84574 4.60125 5.66196L11.1189 12.1797ZM19.5 6.25V16.3183L20.9993 17.8176C20.9998 17.7951 21 17.7726 21 17.75V6.25C21 4.45507 19.5449 3 17.75 3H6.25C6.2275 3 6.20505 3.00023 6.18265 3.00068L7.68194 4.5H17.75C18.7165 4.5 19.5 5.2835 19.5 6.25ZM18.3305 19.4014C18.1489 19.4653 17.9535 19.5 17.75 19.5H6.25C6.04613 19.5 5.8504 19.4651 5.66845 19.4011L11.4752 13.7148L11.5588 13.644C11.8501 13.4316 12.2596 13.4553 12.5247 13.7148L18.3305 19.4014ZM15.2521 6.5C16.4959 6.5 17.5042 7.50831 17.5042 8.75212C17.5042 9.99592 16.4959 11.0042 15.2521 11.0042C14.0083 11.0042 13 9.99592 13 8.75212C13 7.50831 14.0083 6.5 15.2521 6.5ZM15.2521 8C14.8367 8 14.5 8.33673 14.5 8.75212C14.5 9.1675 14.8367 9.50423 15.2521 9.50423C15.6675 9.50423 16.0042 9.1675 16.0042 8.75212C16.0042 8.33673 15.6675 8 15.2521 8Z" Fill="#D13438" />
-                                                    </Viewbox>
-                                                    <TransitioningContentControl Content="{Binding Thumbnail.Bitmap, Mode=OneWay}">
-                                                        <TransitioningContentControl.ContentTemplate>
-                                                            <DataTemplate DataType="imaging:Bitmap">
-                                                                <Image x:Name="ThumbnailImage" Margin="0" Source="{Binding}" Stretch="Uniform" VerticalAlignment="Center">
-                                                                    <Image.Clip>
-                                                                        <RectangleGeometry Rect="{Binding Bounds, ElementName=ThumbnailImage, Converter={StaticResource BoundsToLocalRectConverter}}" RadiusX="8" RadiusY="8" />
-                                                                    </Image.Clip>
-                                                                </Image>
-                                                            </DataTemplate>
-                                                        </TransitioningContentControl.ContentTemplate>
-                                                        <TransitioningContentControl.PageTransition>
-                                                            <CrossFade Duration="0:00:00.150" />
-                                                        </TransitioningContentControl.PageTransition>
-                                                    </TransitioningContentControl>
-                                                </Grid>
-                                            </Border>
-                                        </Border>
-                                        <Border Classes="type-badge" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,7,7,7" Padding="7,3,7,3" CornerRadius="5" Background="#CC20242A" IsVisible="{Binding $parent[ListBox].DataContext.ShowFileTypeBadges}">
-                                            <TextBlock Text="{Binding MediaType}" Foreground="White" FontSize="11" FontWeight="SemiBold" />
-                                        </Border>
-                                    </Grid>
-                                    <TextBlock Classes="media-title" Text="{Binding FileName}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" IsVisible="{Binding $parent[ListBox].DataContext.ShowFileNames}" Opacity="0.9" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                    <!--
-                    <ListBox.KeyBindings>
-					    <KeyBinding Command="{Binding QueueListviewEnterKeyCommand}" Gesture="Enter" />
-					    <KeyBinding Command="{Binding QueueListviewDeleteSelectedWithoutPromptCommand}" CommandParameter="{Binding #QueueListBox.SelectedItems}" Gesture="Ctrl+Delete"/>
-				    </ListBox.KeyBindings>
-                    -->
-                    <ListBox.Resources>
-                        
-                        <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
+            <controls:FAFrame x:Name="MediaListBoxFrame" Grid.Row="1" Background="Transparent" />
 
-                        <!-- Edit: AnimatedScrollViewer. -->
-                        <ControlTheme x:Key="{x:Type ListBox}" TargetType="ListBox">
-                            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
-                            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
-                            <Setter Property="BorderThickness" Value="{DynamicResource ListBoxBorderThemeThickness}" />
-                            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
-                            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
-                            <Setter Property="ScrollViewer.IsScrollChainingEnabled" Value="False" />
-                            <Setter Property="ScrollViewer.IsScrollInertiaEnabled" Value="False" />
-                            <Setter Property="Template">
-                                <ControlTemplate>
-                                    <Border Name="border"
-                                            ClipToBounds="{TemplateBinding ClipToBounds}"
-                                            Background="{TemplateBinding Background}"
-                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                            CornerRadius="{TemplateBinding CornerRadius}">
-                                        <!-- 
-                                        <vc:AnimatedScrollViewer Name="PART_ScrollViewer" Duration="0:00:00.250" ScrollMultiplier="1.8"
-                                        -->
-                                        <ScrollViewer Name="PART_ScrollViewer"
-                                                                 VerticalSnapPointsType="{TemplateBinding (ScrollViewer.VerticalSnapPointsType)}"
-                                                                 HorizontalSnapPointsType="{TemplateBinding (ScrollViewer.HorizontalSnapPointsType)}"
-                                                                 HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
-                                                                 VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}"
-                                                                 IsScrollChainingEnabled="{TemplateBinding (ScrollViewer.IsScrollChainingEnabled)}"
-                                                                 IsScrollInertiaEnabled="{TemplateBinding (ScrollViewer.IsScrollInertiaEnabled)}"
-                                                                 IsDeferredScrollingEnabled="{TemplateBinding (ScrollViewer.IsDeferredScrollingEnabled)}"
-                                                                 AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
-                                                                 BringIntoViewOnFocusChange="{TemplateBinding (ScrollViewer.BringIntoViewOnFocusChange)}">
-                                            
-															<Interaction.Behaviors>
-																<ia:VerticalScrollViewerAnimatedBehavior/>
-															</Interaction.Behaviors>
-
-                                            <ItemsPresenter Name="PART_ItemsPresenter"
-                                                            ItemsPanel="{TemplateBinding ItemsPanel}"
-                                                            Margin="{TemplateBinding Padding}"/>
-                                        </ScrollViewer>
-                                    </Border>
-                                </ControlTemplate>
-                            </Setter>
-                        </ControlTheme>
-                    </ListBox.Resources>
-                </ListBox>
         </Grid>
+        
+        <Border Grid.Row="0" Grid.Column="2" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"/>
 
-        <Border Grid.Row="1" Grid.ColumnSpan="3" Margin="12,10,12,6" Padding="8" CornerRadius="12" BorderThickness="1" BorderBrush="#33000000">
-            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-                <Border Grid.Column="0" Margin="4" Padding="8,6" CornerRadius="10" BorderThickness="1" BorderBrush="#22000000" VerticalAlignment="Center">
-                    <StackPanel Spacing="5">
-                        <TextBlock Text="LIBRARY" FontSize="10" FontWeight="Bold" Opacity="0.65" Margin="4,0,0,0" />
-                        <Button Classes="command-bar-button" ToolTip.Tip="Add folder" Click="OnAddFolderClick">
-                            <Path Width="14" Height="14" Data="{StaticResource FolderAddIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
-                        </Button>
-                    </StackPanel>
-                </Border>
+        <!-- Error Infobar -->
+		<Grid Grid.Row="1">
+			<ui:FAInfoBar Title="{Binding InfoBarErrorTitle}" IsOpen="{Binding IsInfoBarOpen, Mode=TwoWay}" IsIconVisible="True" IsClosable="True" Severity="Error" Message="{Binding InfoBarErrorMessage}" />
+		</Grid>
 
-                <Grid Grid.Column="1" ColumnDefinitions="Auto,Auto" VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <Border Grid.Column="0" Margin="4" Padding="8,6" CornerRadius="10" BorderThickness="1" BorderBrush="#22000000" VerticalAlignment="Center">
-                        <StackPanel Spacing="5">
-                            <TextBlock Text="VIEW" FontSize="10" FontWeight="Bold" Opacity="0.65" Margin="4,0,0,0" />
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <StackPanel Margin="2,0" Spacing="2">
-                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                        <Path Width="14" Height="14" Data="{StaticResource ImageIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Window}}" />
-                                        <TextBlock Text="Thumbnail size" FontSize="12" VerticalAlignment="Center" />
-                                    </StackPanel>
-                                    <Slider Minimum="80" Maximum="320" TickFrequency="10" IsSnapToTickEnabled="True" Width="150" Value="{Binding ThumbnailSize, Mode=TwoWay}" ToolTip.Tip="Adjust thumbnail size" />
-                                </StackPanel>
-                                <ToggleButton Classes="command-bar-toggle" Margin="2" ToolTip.Tip="Show filenames" IsChecked="{Binding ShowFileNames, Mode=TwoWay}">
-                                    <Path Width="14" Height="14" Data="{StaticResource TextIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
-                                </ToggleButton>
-                                <ToggleButton Classes="command-bar-toggle" Margin="2" ToolTip.Tip="File type badges" IsChecked="{Binding ShowFileTypeBadges, Mode=TwoWay}">
-                                    <Path Width="14" Height="14" Data="{StaticResource TagIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
-                                </ToggleButton>
-
-                                <ToggleButton Classes="command-bar-toggle" Margin="2" ToolTip.Tip="Include subfolders" IsChecked="{Binding IncludeDescendants, Mode=TwoWay}">
-                                    <Path Width="14" Height="14" Data="{StaticResource FolderArrowIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
-                                </ToggleButton>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-                    <Border Grid.Column="1" Margin="4" Padding="8,6" CornerRadius="10" BorderThickness="1" BorderBrush="#22000000" VerticalAlignment="Center">
-                        <StackPanel Spacing="5" VerticalAlignment="Center">
-                            <TextBlock Text="MEDIA" FontSize="10" FontWeight="Bold" Opacity="0.65" Margin="4,0,0,0" />
-                            <StackPanel Orientation="Horizontal">
-                                <ToggleButton Classes="command-bar-toggle" Margin="2" ToolTip.Tip="Images" IsChecked="{Binding IncludeImages, Mode=TwoWay}">
-                                    <Path Width="14" Height="14" Data="{StaticResource ImageIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
-                                </ToggleButton>
-                                <ToggleButton Classes="command-bar-toggle" Margin="2" ToolTip.Tip="Videos" IsChecked="{Binding IncludeVideos, Mode=TwoWay}">
-                                    <Path Width="14" Height="14" Data="{StaticResource VideoIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
-                                </ToggleButton>
-                                <ToggleButton Classes="command-bar-toggle" Margin="2" ToolTip.Tip="Audio" IsChecked="{Binding IncludeAudio, Mode=TwoWay}">
-                                    <Path Width="14" Height="14" Data="{StaticResource AudioIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
-                                </ToggleButton>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-
-                <Border Grid.Column="2" Margin="4" Padding="8,6" CornerRadius="10" BorderThickness="1" BorderBrush="#22000000" VerticalAlignment="Center">
-                    <StackPanel Spacing="5">
-                        <TextBlock Text="SCOPE" FontSize="10" FontWeight="Bold" Opacity="0.65" Margin="4,0,0,0" />
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <ToggleButton Classes="command-bar-toggle" Margin="2" ToolTip.Tip="Details" IsChecked="{Binding IsDetailsPaneOpen, Mode=TwoWay}">
-                                <Path Width="14" Height="14" Data="{StaticResource PanelRightIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
-                            </ToggleButton>
-                            <Button Content="{Binding Settings.SettingsTitle}" Click="OnSettingsClick" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
+        <!-- Status Bar -->
+        <Grid Grid.Row="2" Grid.Column="0" ColumnDefinitions="*,Auto" Margin="4,0,0,0">
+            <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Opacity="0.7" Margin="4" />
+        </Grid>
+        <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto">
+            <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto" Margin="8,0,0,0">
+                <TextBlock Grid.Column="0" Text="{Binding ThumbnailStatusText}" VerticalAlignment="Center" Margin="4" Opacity="0.7" />
+                <TextBlock Grid.Column="1" Text="{Binding ScanStatusText}" VerticalAlignment="Center" IsVisible="{Binding IsScanning}" Margin="4" Opacity="0.7"/>
             </Grid>
-        </Border>
+            <ProgressBar Grid.Column="1" Width="200" Margin="4,0,0,0" Minimum="0" Maximum="100" Value="{Binding ScanProgressPercent}" IsVisible="{Binding IsScanning}" />
+        </Grid>
+        <Border Grid.Row="2" Grid.ColumnSpan="3" Margin="0" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"/>
 
-
-        <Border Grid.Row="2" Grid.ColumnSpan="3" Margin="12,6,12,10" Padding="8,6" CornerRadius="6" BorderThickness="1" BorderBrush="#22000000">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Opacity="0.8" />
-                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsScanning}">
-                        <ProgressBar Width="200" Minimum="0" Maximum="100" Value="{Binding ScanProgressPercent}" />
-                        <TextBlock Text="{Binding ScanStatusText}" VerticalAlignment="Center" />
-                    </StackPanel>
-                </StackPanel>
-                <!--
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding IsGeneratingThumbnails}">
-                    <ProgressBar Width="100" IsIndeterminate="True" />
-                    <TextBlock Text="Updating thumbnails" VerticalAlignment="Center" />
-                </StackPanel>
-                -->
-            </Grid>
-        </Border>
     </Grid>
 
 </Window>

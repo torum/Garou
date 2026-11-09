@@ -1,11 +1,8 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:Garou.ViewModels"
-        x:Class="Garou.Views.SettingsWindow"
-        x:DataType="vm:MainViewModel"
-        Width="560" Height="700" MinWidth="480" MinHeight="520"
-        WindowStartupLocation="CenterOwner"
-        Title="{Binding Settings.SettingsTitle}">
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Garou.ViewModels"
+             x:Class="Garou.UI.Views.SettingsPage"
+             x:DataType="vm:MainViewModel">
     <Grid RowDefinitions="Auto,*,Auto" Margin="24" RowSpacing="16">
         <StackPanel Grid.Row="0" Spacing="12">
             <TextBlock Text="{Binding Settings.SettingsTitle}" FontSize="22" FontWeight="SemiBold" />
@@ -86,12 +83,13 @@
             </StackPanel>
         </ScrollViewer>
 
-        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" VerticalAlignment="Center">
-            <TextBlock Grid.Column="0" Text="{Binding Settings.StatusText}" TextWrapping="Wrap"
-                       VerticalAlignment="Center" Opacity="0.8" />
-            <Button Grid.Column="1" Content="{Binding Settings.SaveLabel}"
-                    Command="{Binding Settings.SaveSettingsCommand}" />
-            <Button Grid.Column="2" Content="{Binding Settings.CloseLabel}" Click="OnCloseClick" />
-        </Grid>
+
+        <Border Grid.Row="2" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" VerticalAlignment="Center" Margin="4">
+                <TextBlock Grid.Column="0" Text="{Binding Settings.StatusText}" TextWrapping="Wrap"
+                           VerticalAlignment="Center" Opacity="0.8" />
+                <Button Grid.Column="1" Content="{Binding Settings.CloseLabel}" Click="OnCloseClick" />
+            </Grid>
+        </Border>
     </Grid>
-</Window>
+</UserControl>

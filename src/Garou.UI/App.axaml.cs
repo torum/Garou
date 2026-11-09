@@ -6,12 +6,14 @@ using Garou.ViewModels;
 using Garou.Views;
 using Garou.Infrastructure.Settings;
 using Microsoft.Extensions.DependencyInjection;
+using System.Threading.Tasks;
 
 namespace Garou
 {
     public partial class App : Avalonia.Application
     {
         public static IServiceProvider Services { get; set; } = null!;
+        internal static Task StartupTask { get; set; } = Task.CompletedTask;
 
         public override void Initialize()
         {

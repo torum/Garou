@@ -187,4 +187,31 @@
   <data name="SelectAtLeastOneExtension" xml:space="preserve">
 	<value>Select at least one file extension.</value>
   </data>
+  <data name="TooltipOpenDetailsPane" xml:space="preserve">
+	<value>Open details pane</value>
+  </data>
+  <data name="TooltipAdjustThumbnailSize" xml:space="preserve">
+	<value>Adjust thumbnail size</value>
+  </data>
+  <data name="TooltipShowFilenames" xml:space="preserve">
+	<value>Show filenames</value>
+  </data>
+  <data name="TooltipShowFileTypeBadges" xml:space="preserve">
+	<value>Show file type badges</value>
+  </data>
+  <data name="TooltipIncludeSubfolders" xml:space="preserve">
+	<value>Include subfolders</value>
+  </data>
+  <data name="TooltipIncludeImages" xml:space="preserve">
+	<value>Include images</value>
+  </data>
+  <data name="TooltipIncludeVideos" xml:space="preserve">
+	<value>Include videos</value>
+  </data>
+  <data name="TooltipIncludeAudio" xml:space="preserve">
+	<value>Include audio</value>
+  </data>
+  <data name="ErrorTitle" xml:space="preserve">
+	<value>Error</value>
+  </data>
 </root>

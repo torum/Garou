@@ -58,13 +58,13 @@
 
         <Style Selector="^.Close">
             <Style Selector="^:pointerover /template/ Border">
-                <Setter Property="Background" Value="#e81123" />
+                <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBrush}" />
             </Style>
             <Style Selector="^:pointerover /template/ ui|FAFontIcon">
                 <Setter Property="Foreground" Value="White" />
             </Style>
             <Style Selector="^:pressed /template/ Border">
-                <Setter Property="Background" Value="#f1707a" />
+                <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBrush}" />
             </Style>
             <Style Selector="^:pressed /template/ ui|FAFontIcon">
                 <Setter Property="Foreground" Value="White" />

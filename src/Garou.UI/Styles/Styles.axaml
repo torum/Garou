@@ -28,6 +28,26 @@
 
 			<StaticResource x:Key="CardStrokeBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
 
+			<SolidColorBrush x:Key="ToggleButtonBackground" Color="Transparent" />
+			<SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#18808080" />
+			<SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#28808080" />
+			<SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#18808080" />
+
+			<ResourceDictionary.ThemeDictionaries>
+				<ResourceDictionary x:Key="Light">
+					<SolidColorBrush x:Key="ToggleButtonForeground" Color="#E4000000" />
+					<SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#E4000000" />
+					<SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#E4000000" />
+					<SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#E4000000" />
+				</ResourceDictionary>
+				<ResourceDictionary x:Key="Dark">
+					<SolidColorBrush x:Key="ToggleButtonForeground" Color="#FFFFFF" />
+					<SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
+					<SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
+					<SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
+				</ResourceDictionary>
+			</ResourceDictionary.ThemeDictionaries>
+
 
         <conv:BoundsToLocalRectConverter x:Key="BoundsToLocalRectConverter" />
         <DropShadowEffect x:Key="ThumbnailImageShadow" BlurRadius="6" Color="#50000000" OffsetX="0" OffsetY="2" />
@@ -55,4 +75,5 @@
 
         </ResourceDictionary>
     </Styles.Resources>
+
 </Styles>
