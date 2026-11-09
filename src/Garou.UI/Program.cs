@@ -63,10 +63,20 @@ namespace Garou
             }
         }
 
+        // Suppress the experimental warning required for ForceDrawnDecorations
+#pragma warning disable AVALONIA_WAYLAND_FORCE_CSD
         // Avalonia configuration, don't remove; also used by visual designer.
         public static AppBuilder BuildAvaloniaApp()
             => AppBuilder.Configure<App>()
                 .UsePlatformDetect()
+                .UseWaylandWithFallback()
+                .With(new WaylandPlatformOptions()
+                {
+                    AppId = "MPDCtrlX",  // Matches .desktop launcher file
+                    UseDmabufSwapchain = null,     // Enables high-performance rendering
+                    UseGLibMainLoop = false,         // Integrates with Linux desktop loops
+                    ForceDrawnDecorations = true    // Enables custom window decorations especially for KDE environments where they prefer server-side decorations.
+                })
                 .With(new SkiaOptions
                 {
                     MaxGpuResourceSizeBytes = 256 * 1024 * 1024 // Set cache to 256MB. Without this, there are issues with large images.
@@ -75,7 +85,7 @@ namespace Garou
                 {
                     UseRegionDirtyRectClipping = true
                 })
-                .WithInterFont()
-                .LogToTrace();
+                .WithInterFont();
+#pragma warning restore AVALONIA_WAYLAND_FORCE_CSD
     }
 }

@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Garou.Application.Libraries;
 using Garou.Domain.Abstractions;
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
@@ -12,6 +13,7 @@ public sealed class MediaIndexerService(
     ILibraryRepository libraries,
     IMediaFileRepository mediaFiles,
     IFolderRepository folders,
+    LibraryOperationGate operationGate,
     AppSettingsSession settingsSession,
     TimeProvider timeProvider) : ILibraryScanner
 {
@@ -49,6 +51,16 @@ public sealed class MediaIndexerService(
 
     public async Task ScanAsync(LibraryDefinition library, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
     {
+        using var operation = await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false);
+        await ScanCoreAsync(library, progress, clearSuppressedPaths: true, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ScanCoreAsync(
+        LibraryDefinition library,
+        IProgress<ScanProgress>? progress,
+        bool clearSuppressedPaths,
+        CancellationToken cancellationToken)
+    {
         if (!Directory.Exists(library.RootPath))
         {
             library.IsOnline = false;
@@ -56,10 +68,20 @@ public sealed class MediaIndexerService(
         }
 
         library.IsOnline = true;
+        if (clearSuppressedPaths)
+        {
+            operationGate.ClearSuppressedPathsUnder(library.RootPath);
+        }
+        else if (operationGate.IsPathSuppressed(library.RootPath))
+        {
+            return;
+        }
+
         progress?.Report(new ScanProgress("Enumerating files", 0, 0));
         var searchOption = settingsSession.Current.ScanSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
         var files = Directory.EnumerateFiles(library.RootPath, "*", searchOption)
-            .Where(path => IsSupported(Path.GetExtension(path)))
+            .Where(path => IsSupported(Path.GetExtension(path))
+                && (clearSuppressedPaths || !operationGate.IsPathSuppressed(path)))
             .ToList();
 
         var known = await mediaFiles.GetSignaturesUnderRootAsync(library.RootPath, cancellationToken).ConfigureAwait(false);
@@ -171,6 +193,12 @@ public sealed class MediaIndexerService(
 
     internal async Task HandleAsync(LibraryDefinition library, FileChangeEvent change, CancellationToken cancellationToken)
     {
+        using var operation = await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false);
+        await HandleCoreAsync(library, change, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleCoreAsync(LibraryDefinition library, FileChangeEvent change, CancellationToken cancellationToken)
+    {
         if (!Directory.Exists(library.RootPath))
         {
             library.IsOnline = false;
@@ -179,7 +207,7 @@ public sealed class MediaIndexerService(
 
         if (change.RequiresFullRescan)
         {
-            await ScanAsync(library, null, cancellationToken).ConfigureAwait(false);
+            await ScanCoreAsync(library, null, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -224,6 +252,11 @@ public sealed class MediaIndexerService(
 
     internal async Task IndexFileAsync(string rootPath, string path, CancellationToken cancellationToken)
     {
+        if (operationGate.IsPathSuppressed(path))
+        {
+            return;
+        }
+
         if (!IsWithinScanScope(rootPath, path) || !IsSupported(Path.GetExtension(path)))
         {
             await mediaFiles.DeleteByPathAsync(path, cancellationToken).ConfigureAwait(false);

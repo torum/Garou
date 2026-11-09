@@ -1,3 +1,4 @@
+using Garou.Application.Libraries;
 using Garou.Domain.Abstractions;
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
@@ -9,6 +10,90 @@ namespace Garou.Tests.Sync;
 
 public sealed class SyncTests
 {
+    [Fact]
+    public async Task WhenRemovalHoldsOperationGateThenIndexerScanWaits()
+    {
+        var gate = new LibraryOperationGate();
+        var operation = await gate.EnterAsync(CancellationToken.None);
+        var library = new LibraryDefinition
+        {
+            RootPath = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}")
+        };
+        var scan = CreateScanService(new FakeMediaFileRepository(), operationGate: gate)
+            .ScanAsync(library, null, CancellationToken.None);
+
+        try
+        {
+            Assert.False(scan.IsCompleted);
+        }
+        finally
+        {
+            operation.Dispose();
+        }
+
+        await scan;
+        Assert.False(library.IsOnline);
+    }
+
+    [Fact]
+    public async Task WhenWatcherEventTargetsSuppressedFolderThenFileIsNotIndexed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"suppressed-folder-{Guid.NewGuid():N}");
+        var nested = Path.Combine(root, "nested");
+        Directory.CreateDirectory(nested);
+        var path = Path.Combine(nested, "photo.jpg");
+        await File.WriteAllBytesAsync(path, [1, 2, 3], cancellationToken);
+        var operationGate = new LibraryOperationGate();
+        operationGate.SuppressPath(nested);
+        var repository = new FakeMediaFileRepository();
+
+        try
+        {
+            var service = CreateScanService(repository, settingsSession: CreateSettingsSession(".jpg"), operationGate: operationGate);
+            var library = new LibraryDefinition { RootPath = root };
+            await service.HandleAsync(
+                library,
+                new FileChangeEvent { LibraryRoot = root, FullPath = path, Kind = FileChangeKind.Created },
+                cancellationToken);
+            await service.HandleAsync(
+                library,
+                new FileChangeEvent { LibraryRoot = root, FullPath = root, RequiresFullRescan = true },
+                cancellationToken);
+
+            Assert.Empty(repository.Upserted);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenFullScanRunsThenSuppressedFolderCanBeIndexedAgain()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"rescan-suppressed-folder-{Guid.NewGuid():N}");
+        var nested = Path.Combine(root, "nested");
+        Directory.CreateDirectory(nested);
+        await File.WriteAllBytesAsync(Path.Combine(nested, "photo.jpg"), [1, 2, 3], cancellationToken);
+        var operationGate = new LibraryOperationGate();
+        operationGate.SuppressPath(nested);
+        var repository = new FakeMediaFileRepository();
+
+        try
+        {
+            await CreateScanService(repository, settingsSession: CreateSettingsSession(".jpg"), operationGate: operationGate)
+                .ScanAsync(new LibraryDefinition { RootPath = root }, null, cancellationToken);
+
+            Assert.Single(repository.Upserted);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task WhenLibraryRootIsMissingThenLibraryIsMarkedOfflineAndNothingIsWritten()
     {
@@ -400,6 +485,7 @@ public sealed class SyncTests
             new ScriptedLibraryRepository(library),
             repository,
             new FakeFolderRepository(),
+            new LibraryOperationGate(),
             settingsSession ?? new AppSettingsSession(),
             TimeProvider.System);
     }
@@ -407,13 +493,15 @@ public sealed class SyncTests
     private static MediaIndexerService CreateScanService(
         FakeMediaFileRepository repository,
         FakeFolderRepository? folders = null,
-        AppSettingsSession? settingsSession = null)
+        AppSettingsSession? settingsSession = null,
+        LibraryOperationGate? operationGate = null)
     {
         return new MediaIndexerService(
             new NoopWatcher(),
             new EmptyLibraryRepository(),
             repository,
             folders ?? new FakeFolderRepository(),
+            operationGate ?? new LibraryOperationGate(),
             settingsSession ?? new AppSettingsSession(),
             TimeProvider.System);
     }

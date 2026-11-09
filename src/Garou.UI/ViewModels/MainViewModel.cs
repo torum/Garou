@@ -16,6 +16,7 @@ namespace Garou.ViewModels;
 public partial class MainViewModel(
     MediaQueryService queries,
     LibraryCommands libraryCommands,
+    LibraryOperationGate operationGate,
     SettingsViewModel settings,
     AppSettingsSession settingsSession,
     IThumbnailGeneratorService thumbnailGenerator,
@@ -179,6 +180,7 @@ public partial class MainViewModel(
 
         try
         {
+            using var operation = await operationGate.EnterAsync(cancellationToken);
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -207,6 +209,7 @@ public partial class MainViewModel(
             }
 
             await folders.DeleteSubtreeAsync(folderNode.Folder.Id, cancellationToken);
+            operationGate.SuppressPath(folderNode.PathText);
             ExpandedFolderIds.ExceptWith(folderIds);
             if (SelectedItem?.File.FolderId is { } selectedMediaFolderId && folderIds.Contains(selectedMediaFolderId))
             {

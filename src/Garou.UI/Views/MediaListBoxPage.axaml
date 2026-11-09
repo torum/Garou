@@ -14,8 +14,6 @@
              x:CompileBindings="True"
              x:Class="Garou.UI.Views.MediaListBoxPage">
     <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-        to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
         <vm:MainViewModel/>
     </Design.DataContext>
     <Grid x:Name="MediaDetailsGrid" RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,Auto,280">
@@ -26,7 +24,7 @@
 
                 <!-- Navigation bread crumbs -->
                 <ui:FABreadcrumbBar x:Name="FolderBreadcrumbBar" Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Left"
-                                  ItemsSource="{Binding SelectedFolderBreadcrumbs}" Opacity="0.5" Margin="8,0,0,0"/>
+                                  ItemsSource="{Binding SelectedFolderBreadcrumbs}" Opacity="0.7" Margin="8,0,0,0"/>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
 

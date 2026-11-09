@@ -191,6 +191,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (menuFlyout.Target?.DataContext is FolderNode folderNode)
+        {
+            foreach (var menuItem in menuFlyout.Items.OfType<MenuItem>())
+            {
+                menuItem.DataContext = folderNode;
+            }
+        }
+
         var settings = _settingsSession.Current;
         var localizer = new ResourceLocalizer(CultureInfo.GetCultureInfo(settings.Language == "ja" ? "ja" : "en"));
         foreach (var menuItem in menuFlyout.Items.OfType<MenuItem>())

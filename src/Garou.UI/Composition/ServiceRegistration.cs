@@ -54,6 +54,7 @@ public static class ServiceRegistration
         services.AddSingleton<IThumbnailCacheRepository, ThumbnailCacheRepository>();
         services.AddSingleton<ILibraryRepository, LibraryRepository>();
 
+        services.AddSingleton<LibraryOperationGate>();
         services.AddSingleton<MediaIndexerService>();
         services.AddSingleton<ILibraryScanner>(provider => provider.GetRequiredService<MediaIndexerService>());
         services.AddHostedService<MediaBackgroundService>();
