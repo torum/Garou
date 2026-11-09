@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Garou.Application.Queries;
@@ -36,6 +38,9 @@ public partial class MainWindow : Window
         
         InitializeComponent();
 
+        Bitmap bitmap = new(AssetLoader.Open(new Uri("avares://Garou.UI/Assets/Garou-24.png")));
+        ImageAppIcon.Source = bitmap;
+
         MediaListBoxFrame.Navigate(typeof(MediaListBoxPage));
 
         LeftPaneGridSplitter.AddHandler(InputElement.PointerReleasedEvent, OnGridSplitterPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
@@ -43,7 +48,12 @@ public partial class MainWindow : Window
         ScalingChanged += OnScalingChanged;
         PositionChanged += (_, _) => ScheduleNormalBoundsCache();
         SizeChanged += (_, _) => ScheduleNormalBoundsCache();
-        Activated += (_, _) => ScheduleNormalBoundsCache();
+        Activated += (_, _) =>
+        {
+            AppTitle.Opacity = 1;
+            ScheduleNormalBoundsCache();
+        };
+        Deactivated += (_, _) => AppTitle.Opacity = 0.5;
         PropertyChanged += (_, change) =>
         {
             if (change.Property == Window.WindowStateProperty && WindowState is WindowState.Normal or WindowState.Maximized)

@@ -13,7 +13,7 @@
         Background="Transparent"
         x:DataType="vm:MainViewModel"
         x:CompileBindings="True"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/Garou.ico"
         WindowStartupLocation="Manual"
         MinWidth="800" MinHeight="500"
         Title="Garou">
@@ -46,7 +46,7 @@
             <Border Grid.Row="0" WindowDecorationProperties.ElementRole="TitleBar" Margin="0,4,0,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="Transparent">
                 <Grid ColumnDefinitions="*,Auto">
                     <!-- App Icon and Title hide when x11 -->
-                    <StackPanel x:Name="AppTitle" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,18,0">
+                    <StackPanel x:Name="AppTitle" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,18,0">
                         <Image x:Name="ImageAppIcon" Width="16" Height="16" Margin="0,0,6,0" Stretch="Uniform" StretchDirection="DownOnly" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                         <TextBlock Text="Garou" Opacity="0.9" FontWeight="SemiBold" Margin="0,0,0,1" VerticalAlignment="Center" HorizontalAlignment="Center"></TextBlock>
                     </StackPanel>
