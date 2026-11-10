@@ -27,6 +27,12 @@ public partial class SettingsPage : UserControl
     private void OnCloseClick(object? sender, RoutedEventArgs e)
     {
         var frame = this.GetVisualAncestors().OfType<FAFrame>().FirstOrDefault();
-        frame?.Navigate(typeof(MediaListBoxPage));
+        if (frame is not null)
+        {
+            frame.Navigate(typeof(MediaListBoxPage));
+            return;
+        }
+
+        this.GetVisualAncestors().OfType<Window>().FirstOrDefault()?.Close();
     }
 }

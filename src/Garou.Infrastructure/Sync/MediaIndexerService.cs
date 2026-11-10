@@ -13,6 +13,7 @@ public sealed class MediaIndexerService(
     ILibraryRepository libraries,
     IMediaFileRepository mediaFiles,
     IFolderRepository folders,
+    ILibraryExcludedFolderRepository excludedFolders,
     LibraryOperationGate operationGate,
     AppSettingsSession settingsSession,
     TimeProvider timeProvider) : ILibraryScanner
@@ -79,8 +80,10 @@ public sealed class MediaIndexerService(
 
         progress?.Report(new ScanProgress("Enumerating files", 0, 0));
         var searchOption = settingsSession.Current.ScanSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        var excludedPaths = await excludedFolders.GetPathsAsync(library.Id, cancellationToken).ConfigureAwait(false);
         var files = Directory.EnumerateFiles(library.RootPath, "*", searchOption)
             .Where(path => IsSupported(Path.GetExtension(path))
+                && !IsExcluded(path, excludedPaths)
                 && (clearSuppressedPaths || !operationGate.IsPathSuppressed(path)))
             .ToList();
 
@@ -218,10 +221,10 @@ public sealed class MediaIndexerService(
                 break;
             case FileChangeKind.Renamed:
                 await mediaFiles.DeleteByPathAsync(change.OldFullPath!, cancellationToken).ConfigureAwait(false);
-                await IndexFileAsync(library.RootPath, change.FullPath, cancellationToken).ConfigureAwait(false);
+                await IndexFileAsync(library.Id, library.RootPath, change.FullPath, cancellationToken).ConfigureAwait(false);
                 break;
             default:
-                await IndexFileAsync(library.RootPath, change.FullPath, cancellationToken).ConfigureAwait(false);
+                await IndexFileAsync(library.Id, library.RootPath, change.FullPath, cancellationToken).ConfigureAwait(false);
                 break;
         }
     }
@@ -250,9 +253,15 @@ public sealed class MediaIndexerService(
         return draft;
     }
 
-    internal async Task IndexFileAsync(string rootPath, string path, CancellationToken cancellationToken)
+    internal async Task IndexFileAsync(Guid libraryId, string rootPath, string path, CancellationToken cancellationToken)
     {
         if (operationGate.IsPathSuppressed(path))
+        {
+            return;
+        }
+
+        var excludedPaths = await excludedFolders.GetPathsAsync(libraryId, cancellationToken).ConfigureAwait(false);
+        if (IsExcluded(path, excludedPaths))
         {
             return;
         }
@@ -276,6 +285,24 @@ public sealed class MediaIndexerService(
         }
 
         await mediaFiles.UpsertBatchAsync([mediaFile], cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool IsExcluded(string path, IReadOnlyList<string> excludedPaths) =>
+        excludedPaths.Any(excludedPath => IsSameOrDescendant(excludedPath, path));
+
+    private static bool IsSameOrDescendant(string parentPath, string path)
+    {
+        var fullParentPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(parentPath));
+        var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        if (string.Equals(fullParentPath, fullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var relativePath = Path.GetRelativePath(fullParentPath, fullPath);
+        return !Path.IsPathRooted(relativePath)
+            && relativePath != ".."
+            && !relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal);
     }
 
     private bool IsWithinScanScope(string rootPath, string path)

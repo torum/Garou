@@ -117,6 +117,12 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    public string GeneralTabLabel => _localizer["GeneralTabLabel"];
+
+    public string ApplicationsTabLabel => _localizer["ApplicationsTabLabel"];
+
+    public string CacheAndScanTabLabel => _localizer["CacheAndScanTabLabel"];
+
     public string ExtensionsLabel => _localizer["IncludedExtensionsLabel"];
 
     public string ExtensionsDescription => _localizer["IncludedExtensionsDescription"];

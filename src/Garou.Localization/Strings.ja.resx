@@ -79,6 +79,15 @@
   <data name="DarkTheme" xml:space="preserve">
 	<value>ダーク</value>
   </data>
+  <data name="GeneralTabLabel" xml:space="preserve">
+    <value>一般</value>
+  </data>
+  <data name="ApplicationsTabLabel" xml:space="preserve">
+    <value>アプリケーション</value>
+  </data>
+  <data name="CacheAndScanTabLabel" xml:space="preserve">
+    <value>キャッシュとスキャン</value>
+  </data>
   <data name="ThumbnailCacheLimitLabel" xml:space="preserve">
 	<value>サムネイルキャッシュの上限</value>
   </data>

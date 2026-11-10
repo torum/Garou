@@ -262,7 +262,7 @@
 
         <!-- Details Pane -->
         <Border Grid.Row="1" Grid.Column="2" IsVisible="{Binding IsDetailsPaneOpen}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
                 <StackPanel Margin="16" Spacing="8" DataContext="{Binding SelectedItem}" x:DataType="vm:MediaItemViewModel">
                     <SelectableTextBlock Text="{Binding FileName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <SelectableTextBlock Text="{Binding File.Path}" Opacity="0.75" TextWrapping="Wrap" />

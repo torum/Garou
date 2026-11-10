@@ -12,13 +12,15 @@ public sealed class LibraryCommandsTests : IDisposable
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"Libraries-{Guid.NewGuid():N}.db");
     private readonly SqliteConnectionFactory _connectionFactory;
     private readonly LibraryRepository _repository;
+    private readonly LibraryExcludedFolderRepository _excludedFolders;
     private readonly LibraryCommands _commands;
 
     public LibraryCommandsTests()
     {
         _connectionFactory = new SqliteConnectionFactory($"Data Source={_databasePath}");
         _repository = new LibraryRepository(_connectionFactory);
-        _commands = new LibraryCommands(_repository, new NoOpLibraryScanner());
+        _excludedFolders = new LibraryExcludedFolderRepository(_connectionFactory);
+        _commands = new LibraryCommands(_repository, _excludedFolders, new NoOpLibraryScanner());
     }
 
     public void Dispose()
@@ -76,10 +78,51 @@ public sealed class LibraryCommandsTests : IDisposable
     {
         await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var id = await _commands.AddLibraryAsync("C:\\Photos", CancellationToken.None);
+        await _excludedFolders.AddAsync(id, Path.Combine(Path.GetTempPath(), "Excluded"), CancellationToken.None);
 
         await _commands.RemoveLibraryAsync(id, CancellationToken.None);
 
         Assert.Empty(await _repository.GetAllAsync(CancellationToken.None));
+        Assert.Empty(await _excludedFolders.GetPathsAsync(id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task WhenLibraryRootIsRemovedThenOnlyTheExactRootIsRemoved()
+    {
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
+        var rootPath = Path.Combine(Path.GetTempPath(), $"Library-{Guid.NewGuid():N}");
+        var nestedPath = Path.Combine(rootPath, "Nested");
+        var rootId = await _commands.AddLibraryAsync(rootPath, CancellationToken.None);
+        var nestedId = await _commands.AddLibraryAsync(nestedPath, CancellationToken.None);
+
+        var removed = await _commands.RemoveLibraryByRootAsync(rootPath + Path.DirectorySeparatorChar, CancellationToken.None);
+
+        Assert.True(removed);
+        Assert.Equal(nestedId, Assert.Single(await _repository.GetAllAsync(CancellationToken.None)).Id);
+        Assert.NotEqual(rootId, nestedId);
+    }
+
+    [Fact]
+    public async Task WhenFolderIsExcludedThenContainingLibrariesStoreItAndNestedLibrariesAreRemoved()
+    {
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
+        var rootPath = Path.Combine(Path.GetTempPath(), $"Library-{Guid.NewGuid():N}");
+        var excludedPath = Path.Combine(rootPath, "Removed");
+        var nestedLibraryPath = Path.Combine(excludedPath, "NestedLibrary");
+        var unrelatedLibraryPath = Path.Combine(Path.GetTempPath(), $"Unrelated-{Guid.NewGuid():N}");
+        var rootId = await _commands.AddLibraryAsync(rootPath, CancellationToken.None);
+        var nestedLibraryId = await _commands.AddLibraryAsync(nestedLibraryPath, CancellationToken.None);
+        var unrelatedLibraryId = await _commands.AddLibraryAsync(unrelatedLibraryPath, CancellationToken.None);
+
+        await _commands.ExcludeFolderAsync(excludedPath, CancellationToken.None);
+
+        Assert.Equal(
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(excludedPath)),
+            Assert.Single(await _excludedFolders.GetPathsAsync(rootId, CancellationToken.None)));
+        var remainingLibraries = await _repository.GetAllAsync(CancellationToken.None);
+        Assert.Contains(remainingLibraries, library => library.Id == rootId);
+        Assert.Contains(remainingLibraries, library => library.Id == unrelatedLibraryId);
+        Assert.DoesNotContain(remainingLibraries, library => library.Id == nestedLibraryId);
     }
 
     [Fact]
@@ -88,7 +131,7 @@ public sealed class LibraryCommandsTests : IDisposable
         await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var id = await _commands.AddLibraryAsync("C:\\\\Photos", CancellationToken.None);
         var scanner = new RecordingLibraryScanner();
-        var commands = new LibraryCommands(_repository, scanner);
+        var commands = new LibraryCommands(_repository, _excludedFolders, scanner);
 
         await commands.RefreshLibraryAsync(id, null, CancellationToken.None);
 
@@ -101,7 +144,7 @@ public sealed class LibraryCommandsTests : IDisposable
         await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
         var id = await _commands.AddLibraryAsync("C:\\\\Photos", CancellationToken.None);
         var scanner = new RecordingLibraryScanner();
-        var commands = new LibraryCommands(_repository, scanner);
+        var commands = new LibraryCommands(_repository, _excludedFolders, scanner);
 
         await commands.ReindexLibraryAsync(id, null, CancellationToken.None);
 
@@ -114,7 +157,7 @@ public sealed class LibraryCommandsTests : IDisposable
     public async Task WhenUnknownLibraryIsRefreshedThenItThrows()
     {
         await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
-        var commands = new LibraryCommands(_repository, new RecordingLibraryScanner());
+        var commands = new LibraryCommands(_repository, _excludedFolders, new RecordingLibraryScanner());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             commands.RefreshLibraryAsync(Guid.CreateVersion7(), null, CancellationToken.None));

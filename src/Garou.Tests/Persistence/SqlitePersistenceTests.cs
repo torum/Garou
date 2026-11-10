@@ -37,7 +37,7 @@ public sealed class SqlitePersistenceTests : IDisposable
             "SELECT GROUP_CONCAT(name, ',') FROM (SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name);";
 
         Assert.Equal(
-            "Folder,Library,MediaFile,MediaFileTag,Tag,ThumbnailCacheEntry",
+            "Folder,Library,LibraryExcludedFolder,MediaFile,MediaFileTag,Tag,ThumbnailCacheEntry",
             await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 

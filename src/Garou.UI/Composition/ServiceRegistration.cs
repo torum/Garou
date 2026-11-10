@@ -53,6 +53,7 @@ public static class ServiceRegistration
         services.AddSingleton<IMediaFileRepository, MediaFileRepository>();
         services.AddSingleton<IThumbnailCacheRepository, ThumbnailCacheRepository>();
         services.AddSingleton<ILibraryRepository, LibraryRepository>();
+        services.AddSingleton<ILibraryExcludedFolderRepository, LibraryExcludedFolderRepository>();
 
         services.AddSingleton<LibraryOperationGate>();
         services.AddSingleton<MediaIndexerService>();

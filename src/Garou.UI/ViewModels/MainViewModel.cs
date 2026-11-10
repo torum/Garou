@@ -209,6 +209,8 @@ public partial class MainViewModel(
             }
 
             await folders.DeleteSubtreeAsync(folderNode.Folder.Id, cancellationToken);
+            await libraryCommands.ExcludeFolderAsync(folderNode.PathText, cancellationToken);
+            await libraryCommands.RemoveLibraryByRootAsync(folderNode.PathText, cancellationToken);
             operationGate.SuppressPath(folderNode.PathText);
             ExpandedFolderIds.ExceptWith(folderIds);
             if (SelectedItem?.File.FolderId is { } selectedMediaFolderId && folderIds.Contains(selectedMediaFolderId))

@@ -79,6 +79,15 @@
   <data name="DarkTheme" xml:space="preserve">
 	<value>Dark</value>
   </data>
+  <data name="GeneralTabLabel" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="ApplicationsTabLabel" xml:space="preserve">
+    <value>Applications</value>
+  </data>
+  <data name="CacheAndScanTabLabel" xml:space="preserve">
+    <value>Cache and scan</value>
+  </data>
   <data name="ThumbnailCacheLimitLabel" xml:space="preserve">
 	<value>Thumbnail cache limit</value>
   </data>

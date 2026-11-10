@@ -176,12 +176,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnSettingsClick(object? sender, RoutedEventArgs e)
+    private async void OnSettingsClick(object? sender, RoutedEventArgs e)
     {
-        var targetPage = MediaListBoxFrame.Content is SettingsPage
-            ? typeof(MediaListBoxPage)
-            : typeof(SettingsPage);
-        MediaListBoxFrame.Navigate(targetPage);
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        await new SettingsWindow().ShowDialog(this);
     }
 
     private void OnMenuFlyoutOpened(object? sender, EventArgs e)

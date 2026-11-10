@@ -65,6 +65,13 @@ public sealed class DatabaseInitializer(SqliteConnectionFactory connectionFactor
             RootPath TEXT NOT NULL UNIQUE,
             IsEnabled INTEGER NOT NULL DEFAULT 1
         );
+
+        CREATE TABLE IF NOT EXISTS LibraryExcludedFolder
+        (
+            LibraryId TEXT NOT NULL REFERENCES Library(Id) ON DELETE CASCADE,
+            Path TEXT NOT NULL COLLATE NOCASE,
+            PRIMARY KEY (LibraryId, Path)
+        );
         """;
 
     public async Task InitializeAsync(CancellationToken cancellationToken)

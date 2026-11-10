@@ -70,6 +70,37 @@ public sealed class SyncTests
     }
 
     [Fact]
+    public async Task WhenWatcherEventTargetsPersistentlyExcludedFolderThenFileIsNotIndexed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"persistently-excluded-{Guid.NewGuid():N}");
+        var excluded = Path.Combine(root, "excluded");
+        Directory.CreateDirectory(excluded);
+        var path = Path.Combine(excluded, "photo.jpg");
+        await File.WriteAllBytesAsync(path, [1, 2, 3], cancellationToken);
+        var repository = new FakeMediaFileRepository();
+        var library = new LibraryDefinition { RootPath = root };
+        var excludedFolders = new FakeLibraryExcludedFolderRepository();
+        await excludedFolders.AddAsync(library.Id, excluded, cancellationToken);
+        using var stop = new CancellationTokenSource();
+        var watcher = new ScriptedWatcher(
+            () => { },
+            [new FileChangeEvent { LibraryRoot = root, FullPath = path, Kind = FileChangeKind.Created }],
+            stop);
+
+        try
+        {
+            await CreateService(repository, watcher, library, excludedFolders: excludedFolders).RunAsync(stop.Token);
+
+            Assert.Empty(repository.Upserted);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task WhenFullScanRunsThenSuppressedFolderCanBeIndexedAgain()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -87,6 +118,37 @@ public sealed class SyncTests
                 .ScanAsync(new LibraryDefinition { RootPath = root }, null, cancellationToken);
 
             Assert.Single(repository.Upserted);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenInitialScanRunsThenPersistentlyExcludedSubtreesAreNotIndexed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"scan-excluded-{Guid.NewGuid():N}");
+        var excluded = Path.Combine(root, "excluded");
+        Directory.CreateDirectory(excluded);
+        var includedFile = Path.Combine(root, "photo.jpg");
+        var excludedFile = Path.Combine(excluded, "clip.mp4");
+        await File.WriteAllBytesAsync(includedFile, [1, 2, 3], cancellationToken);
+        await File.WriteAllBytesAsync(excludedFile, [1, 2, 3], cancellationToken);
+        var repository = new FakeMediaFileRepository();
+        var folders = new FakeFolderRepository();
+        var library = new LibraryDefinition { RootPath = root };
+        var excludedFolders = new FakeLibraryExcludedFolderRepository();
+        await excludedFolders.AddAsync(library.Id, excluded, cancellationToken);
+
+        try
+        {
+            await CreateScanService(repository, folders: folders, excludedFolders: excludedFolders)
+                .ScanAsync(library, null, cancellationToken);
+
+            Assert.Equal(includedFile, Assert.Single(repository.Upserted).Path);
+            Assert.DoesNotContain(await folders.GetAllAsync(cancellationToken), folder => folder.Path == excluded);
         }
         finally
         {
@@ -478,13 +540,15 @@ public sealed class SyncTests
         FakeMediaFileRepository repository,
         IFileWatcherService watcher,
         LibraryDefinition library,
-        AppSettingsSession? settingsSession = null)
+        AppSettingsSession? settingsSession = null,
+        FakeLibraryExcludedFolderRepository? excludedFolders = null)
     {
         return new MediaIndexerService(
             watcher,
             new ScriptedLibraryRepository(library),
             repository,
             new FakeFolderRepository(),
+            excludedFolders ?? new FakeLibraryExcludedFolderRepository(),
             new LibraryOperationGate(),
             settingsSession ?? new AppSettingsSession(),
             TimeProvider.System);
@@ -494,16 +558,38 @@ public sealed class SyncTests
         FakeMediaFileRepository repository,
         FakeFolderRepository? folders = null,
         AppSettingsSession? settingsSession = null,
-        LibraryOperationGate? operationGate = null)
+        LibraryOperationGate? operationGate = null,
+        FakeLibraryExcludedFolderRepository? excludedFolders = null)
     {
         return new MediaIndexerService(
             new NoopWatcher(),
             new EmptyLibraryRepository(),
             repository,
             folders ?? new FakeFolderRepository(),
+            excludedFolders ?? new FakeLibraryExcludedFolderRepository(),
             operationGate ?? new LibraryOperationGate(),
             settingsSession ?? new AppSettingsSession(),
             TimeProvider.System);
+    }
+
+    private sealed class FakeLibraryExcludedFolderRepository : ILibraryExcludedFolderRepository
+    {
+        private readonly Dictionary<Guid, List<string>> _paths = [];
+
+        public Task<IReadOnlyList<string>> GetPathsAsync(Guid libraryId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(_paths.GetValueOrDefault(libraryId, []));
+
+        public Task AddAsync(Guid libraryId, string path, CancellationToken cancellationToken)
+        {
+            if (!_paths.TryGetValue(libraryId, out var paths))
+            {
+                paths = [];
+                _paths.Add(libraryId, paths);
+            }
+
+            paths.Add(path);
+            return Task.CompletedTask;
+        }
     }
 
     private static AppSettingsSession CreateSettingsSession(params string[] includedExtensions)
