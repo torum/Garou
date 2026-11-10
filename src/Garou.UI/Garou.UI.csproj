@@ -6,6 +6,7 @@
     <ApplicationManifest Condition="$([MSBuild]::IsOSPlatform('Windows'))">app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <PublishAot>true</PublishAot>
+	  <Features>runtime-async=on</Features>
     <ApplicationIcon>Assets\Garou.ico</ApplicationIcon>
   </PropertyGroup>
 

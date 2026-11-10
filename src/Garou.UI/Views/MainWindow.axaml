@@ -68,7 +68,7 @@
                 </Grid>
             </Border>
 
-            <TreeView x:Name="FolderTreeView" Grid.Row="1" ItemsSource="{Binding FolderTree}" SelectedItem="{Binding SelectedFolder, Mode=TwoWay}" AutoScrollToSelectedItem="False" Margin="0,6,0,0" TreeViewItem.Expanded="OnTreeItemExpandedChanged" TreeViewItem.Collapsed="OnTreeItemExpandedChanged" ScrollViewer.AllowAutoHide="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <TreeView x:Name="FolderTreeView" Grid.Row="1" ItemsSource="{Binding FolderTree}" SelectedItem="{Binding SelectedFolder, Mode=TwoWay}" AutoScrollToSelectedItem="False" Margin="0,8,0,0" TreeViewItem.Expanded="OnTreeItemExpandedChanged" TreeViewItem.Collapsed="OnTreeItemExpandedChanged" ScrollViewer.AllowAutoHide="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <TreeView.ItemTemplate>
                     <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="queries:FolderNode">
                         <Grid ColumnDefinitions="*" Background="Transparent" ToolTip.Tip="{Binding PathText}">
