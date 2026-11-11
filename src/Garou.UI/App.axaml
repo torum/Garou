@@ -7,6 +7,6 @@
   
     <Application.Styles>
 		<sty:FluentAvaloniaTheme PreferUserAccentColor="True" UseSystemFontOnWindows="True" />
-		<StyleInclude Source="avares://Garou.UI/Styles/Styles.axaml" />
+		<StyleInclude Source="avares://Garou/Styles/Styles.axaml" />
     </Application.Styles>
 </Application>

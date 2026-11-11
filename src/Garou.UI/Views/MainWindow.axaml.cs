@@ -38,7 +38,7 @@ public partial class MainWindow : Window
         
         InitializeComponent();
 
-        Bitmap bitmap = new(AssetLoader.Open(new Uri("avares://Garou.UI/Assets/Garou-24.png")));
+        Bitmap bitmap = new(AssetLoader.Open(new Uri("avares://Garou/Assets/Garou-24.png")));
         ImageAppIcon.Source = bitmap;
 
         MediaListBoxFrame.Navigate(typeof(MediaListBoxPage));

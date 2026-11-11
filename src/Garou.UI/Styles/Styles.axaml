@@ -64,13 +64,13 @@
 
 			
 			<ResourceDictionary.MergedDictionaries>
-				<ResourceInclude Source="avares://Garou.UI/Styles/NavigationViewStyles.axaml" />
-				<ResourceInclude Source="avares://Garou.UI/Styles/NavigationViewItemStyles.axaml" />
-				<ResourceInclude Source="avares://Garou.UI/Styles/NavigationViewItemPresenterStyles.axaml" />
+				<ResourceInclude Source="avares://Garou/Styles/NavigationViewStyles.axaml" />
+				<ResourceInclude Source="avares://Garou/Styles/NavigationViewItemStyles.axaml" />
+				<ResourceInclude Source="avares://Garou/Styles/NavigationViewItemPresenterStyles.axaml" />
 				<!--
-				<ResourceInclude Source="avares://Garou.UI/Styles/WindowDrawnDecorations.axaml" />
+				<ResourceInclude Source="avares://Garou/Styles/WindowDrawnDecorations.axaml" />
 				-->
-				<ResourceInclude Source="avares://Garou.UI/Styles/WindowDecorations.axaml" />
+				<ResourceInclude Source="avares://Garou/Styles/WindowDecorations.axaml" />
 			</ResourceDictionary.MergedDictionaries>
 
         </ResourceDictionary>

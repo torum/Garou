@@ -107,7 +107,7 @@
                             </MenuFlyout>
                         </Border.ContextFlyout>
                         <StackPanel Spacing="4">
-                            <Grid Width="{Binding $parent[ListBox].DataContext.ThumbnailSize}" Height="{Binding $parent[ListBox].DataContext.ThumbnailSize}">
+                            <Grid Width="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).ThumbnailSize}" Height="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).ThumbnailSize}">
                                 <Border CornerRadius="8" Effect="{StaticResource ThumbnailImageShadow}"> <!-- Effect costs a lot.  -->
                                 <Border x:Name="ClipBorder" CornerRadius="8" ClipToBounds="True" Background="Transparent">
                                     <Border.Transitions>
@@ -140,11 +140,11 @@
                                     </Grid>
                                 </Border>
                                 </Border>
-                                <Border Classes="type-badge" Opacity="0.8" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,7,7,7" Padding="7,3,7,3" CornerRadius="5" Background="#CC20242A" IsVisible="{Binding $parent[ListBox].DataContext.ShowFileTypeBadges}">
+                                <Border Classes="type-badge" Opacity="0.8" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,7,7,7" Padding="7,3,7,3" CornerRadius="5" Background="#CC20242A" IsVisible="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).ShowFileTypeBadges}">
                                     <TextBlock Text="{Binding MediaType}" Foreground="White" FontSize="11" FontWeight="SemiBold" />
                                 </Border>
                             </Grid>
-                            <TextBlock Classes="media-title" Opacity="0.8" Text="{Binding FileName}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" IsVisible="{Binding $parent[ListBox].DataContext.ShowFileNames}" HorizontalAlignment="Center" />
+                            <TextBlock Classes="media-title" Opacity="0.8" Text="{Binding FileName}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" IsVisible="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).ShowFileNames}" HorizontalAlignment="Center" />
                         </StackPanel>
                     </Border>
                 </DataTemplate>
