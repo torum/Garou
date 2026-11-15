@@ -68,6 +68,8 @@ public partial class MainViewModel(
 
     public ObservableCollection<FolderNode> FolderTree { get; } = [];
 
+    public ObservableCollection<string> ExcludedFolders { get; } = [];
+
     public SettingsViewModel Settings { get; } = settings;
 
     [ObservableProperty]
@@ -243,7 +245,7 @@ public partial class MainViewModel(
             UpdateSettingsSession();
 
             await ReloadAsync(_selectedFolderId, cancellationToken);
-            StatusText = $"Removed {folderNode.PathText} and {removedMediaCount} indexed media item(s). Source files were not deleted; future scans may re-add this folder.";
+            StatusText = $"Removed {folderNode.PathText} and {removedMediaCount} indexed media item(s). Source files were not deleted. Restore excluded subfolders in Settings, or re-add a removed library root.";
             Log(StatusText);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -1016,6 +1018,60 @@ public partial class MainViewModel(
     public async Task SearchAsync(CancellationToken cancellationToken)
     {
         await ReloadAsync(_selectedFolderId, cancellationToken);
+    }
+
+    public async Task LoadExcludedFoldersAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var paths = await libraryCommands.GetExcludedFoldersAsync(cancellationToken);
+            ExcludedFolders.Clear();
+            foreach (var path in paths)
+            {
+                ExcludedFolders.Add(path);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Settings.StatusText = string.Format(Settings.ExcludedFoldersLoadError, exception.Message);
+            ReportError(Settings.StatusText);
+        }
+    }
+
+    public async Task RestoreExcludedFolderAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!Settings.ScanSubfolders)
+        {
+            Settings.StatusText = Settings.RestoreFolderScanDisabled;
+            return;
+        }
+
+        try
+        {
+            Settings.StatusText = string.Format(Settings.RestoreFolderInProgress, path);
+            var progress = new Progress<ScanProgress>(ReportScanProgress);
+            await RunScanAsync(() => libraryCommands.RestoreExcludedFolderAsync(path, progress, cancellationToken));
+            await LoadFolderTreeAsync(cancellationToken);
+            await ReloadAsync(_selectedFolderId, cancellationToken);
+            Settings.StatusText = Settings.RestoreFolderSuccess;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Settings.StatusText = string.Format(Settings.RestoreFolderError, path, exception.Message);
+            ReportError(Settings.StatusText);
+        }
+        finally
+        {
+            await LoadExcludedFoldersAsync(CancellationToken.None);
+        }
     }
 
     public async Task AddFolderAsync(string path, CancellationToken cancellationToken)

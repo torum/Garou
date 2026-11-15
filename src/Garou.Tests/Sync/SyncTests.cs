@@ -157,6 +157,44 @@ public sealed class SyncTests
     }
 
     [Fact]
+    public async Task WhenExcludedFolderIsRestoredThenItsMediaIsIndexedButExcludedChildrenRemainExcluded()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"restore-scan-{Guid.NewGuid():N}");
+        var excluded = Path.Combine(root, "excluded");
+        var child = Path.Combine(excluded, "child");
+        Directory.CreateDirectory(child);
+        var restoredFile = Path.Combine(excluded, "photo.jpg");
+        var excludedFile = Path.Combine(child, "hidden.jpg");
+        await File.WriteAllBytesAsync(restoredFile, [1, 2, 3], cancellationToken);
+        await File.WriteAllBytesAsync(excludedFile, [1, 2, 3], cancellationToken);
+        var library = new LibraryDefinition { RootPath = root };
+        var exclusions = new FakeLibraryExcludedFolderRepository();
+        await exclusions.AddAsync(library.Id, excluded, cancellationToken);
+        await exclusions.AddAsync(library.Id, child, cancellationToken);
+        var media = new FakeMediaFileRepository();
+        var gate = new LibraryOperationGate();
+        gate.SuppressPath(excluded);
+        var scanner = CreateScanService(media, settingsSession: CreateSettingsSession(".jpg"), operationGate: gate, excludedFolders: exclusions);
+        var commands = new LibraryCommands(new ScriptedLibraryRepository(library), exclusions, scanner);
+
+        try
+        {
+            await scanner.ScanAsync(library, null, cancellationToken);
+            Assert.Empty(media.Upserted);
+
+            await commands.RestoreExcludedFolderAsync(excluded, null, cancellationToken);
+
+            Assert.Equal(restoredFile, Assert.Single(media.Upserted).Path);
+            Assert.Equal(child, Assert.Single(await exclusions.GetPathsAsync(library.Id, cancellationToken)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task WhenLibraryRootIsMissingThenLibraryIsMarkedOfflineAndNothingIsWritten()
     {
         var repository = new FakeMediaFileRepository();
@@ -588,6 +626,16 @@ public sealed class SyncTests
             }
 
             paths.Add(path);
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveAsync(Guid libraryId, string path, CancellationToken cancellationToken)
+        {
+            if (_paths.TryGetValue(libraryId, out var paths))
+            {
+                paths.RemoveAll(item => string.Equals(item, path, StringComparison.OrdinalIgnoreCase));
+            }
+
             return Task.CompletedTask;
         }
     }

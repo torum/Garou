@@ -23,4 +23,16 @@ public sealed class LibraryExcludedFolderRepository(SqliteConnectionFactory conn
             ("$libraryId", libraryId.ToString("N")),
             ("$path", fullPath));
     }
+
+    public async Task RemoveAsync(Guid libraryId, string path, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        await connectionFactory.ExecuteNonQueryAsync(
+            "DELETE FROM LibraryExcludedFolder WHERE LibraryId = $libraryId AND Path = $path COLLATE NOCASE;",
+            cancellationToken,
+            ("$libraryId", libraryId.ToString("N")),
+            ("$path", fullPath));
+    }
 }

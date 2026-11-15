@@ -205,55 +205,67 @@
         </ListBox>
 
         <Border Grid.Row="2" Grid.ColumnSpan="3" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
-        
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+            <Grid ColumnDefinitions="*,Auto">
+                                
+				<StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+					<Button x:Name="SlideshowPlay" Click="OnSlideshowPlayClick" HotKey="Ctrl+P" AutomationProperties.AccessKey="P" ToolTip.Tip="Play Slideshow" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" Focusable="True" Width="39" Height="36" Background="Transparent" BorderThickness="0" Margin="6,0,0,0" VerticalAlignment="Center" Padding="0">
+						<Viewbox Width="20" Height="20">
+							<PathIcon Background="Transparent" Width="NaN" Height="NaN"
+								Data="{StaticResource SlideshowPlayIcon}">
+							</PathIcon>
+						</Viewbox>
+					</Button>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                 
-                <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="0,0,6,0" />
+                    <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="0,0,6,0" />
 
-                <Slider Minimum="80" Maximum="320" TickFrequency="10" IsSnapToTickEnabled="True" Width="150" Value="{Binding ThumbnailSize, Mode=TwoWay}" x:Name="ThumbnailSizeSlider" />
+                    <Slider Minimum="80" Maximum="320" TickFrequency="10" IsSnapToTickEnabled="True" Width="150" Value="{Binding ThumbnailSize, Mode=TwoWay}" x:Name="ThumbnailSizeSlider" />
 
-                <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="6,0,0,0" />
+                    <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="6,0,0,0" />
 
-                <ToggleButton x:Name="ShowFileNamesToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding ShowFileNames, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
-                    <Viewbox Width="14" Height="14">
-                        <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource TextIcon}"></PathIcon>
-                    </Viewbox>
-                </ToggleButton>
+                    <ToggleButton x:Name="ShowFileNamesToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding ShowFileNames, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
+                        <Viewbox Width="14" Height="14">
+                            <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource TextIcon}"></PathIcon>
+                        </Viewbox>
+                    </ToggleButton>
 
-                <ToggleButton x:Name="ShowFileTypeBadgesToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding ShowFileTypeBadges, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
-                    <Viewbox Width="14" Height="14">
-                        <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource TagIcon}"></PathIcon>
-                    </Viewbox>
-                </ToggleButton>
+                    <ToggleButton x:Name="ShowFileTypeBadgesToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding ShowFileTypeBadges, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
+                        <Viewbox Width="14" Height="14">
+                            <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource TagIcon}"></PathIcon>
+                        </Viewbox>
+                    </ToggleButton>
 
-                <ToggleButton x:Name="IncludeDescendantsToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding IncludeDescendants, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
-                    <Viewbox Width="14" Height="14">
-                        <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource FolderArrowIcon}"></PathIcon>
-                    </Viewbox>
-                </ToggleButton>
+                    <ToggleButton x:Name="IncludeDescendantsToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding IncludeDescendants, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
+                        <Viewbox Width="14" Height="14">
+                            <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource FolderArrowIcon}"></PathIcon>
+                        </Viewbox>
+                    </ToggleButton>
 
-                <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="6,0,0,0" />
+                    <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="6,0,0,0" />
 
-                <ToggleButton x:Name="IncludeImagesToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding IncludeImages, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
-                    <Viewbox Width="14" Height="14">
-                        <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource ImageIcon}"></PathIcon>
-                    </Viewbox>
-                </ToggleButton>
-                <ToggleButton x:Name="IncludeVideosToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding IncludeVideos, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
-                    <Viewbox Width="14" Height="14">
-                        <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource VideoIcon}"></PathIcon>
-                    </Viewbox>
-                </ToggleButton>
-                <ToggleButton x:Name="IncludeAudioToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding IncludeAudio, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
-                    <Viewbox Width="14" Height="14">
-                        <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource AudioIcon}"></PathIcon>
-                    </Viewbox>
-                </ToggleButton>
+                    <ToggleButton x:Name="IncludeImagesToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding IncludeImages, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
+                        <Viewbox Width="14" Height="14">
+                            <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource ImageIcon}"></PathIcon>
+                        </Viewbox>
+                    </ToggleButton>
+                    <ToggleButton x:Name="IncludeVideosToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding IncludeVideos, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
+                        <Viewbox Width="14" Height="14">
+                            <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource VideoIcon}"></PathIcon>
+                        </Viewbox>
+                    </ToggleButton>
+                    <ToggleButton x:Name="IncludeAudioToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding IncludeAudio, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
+                        <Viewbox Width="14" Height="14">
+                            <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource AudioIcon}"></PathIcon>
+                        </Viewbox>
+                    </ToggleButton>
                         
-                <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="6,0,0,0" />
+                    <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="6,0,0,0" />
 
-            </StackPanel>
+                </StackPanel>
 
+            </Grid>
         </Border>
 
         <GridSplitter x:Name="DetailsPaneGridSplitter" Grid.Row="1" Grid.Column="1" ResizeDirection="Columns" Width="5" IsVisible="{Binding IsDetailsPaneOpen}" Background="Transparent" />

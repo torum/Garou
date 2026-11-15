@@ -84,7 +84,9 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(VideoMediaTypeLabel));
         OnPropertyChanged(nameof(AudioMediaTypeLabel));
         OnPropertyChanged(nameof(ApplicationPathDescription));
-        OnPropertyChanged(nameof(SubfoldersLabel));
+        OnPropertyChanged(nameof(ExcludedFoldersLabel));
+        OnPropertyChanged(nameof(ExcludedFoldersDescription));
+        OnPropertyChanged(nameof(RestoreFolderLabel));
         OnPropertyChanged(nameof(CloseLabel));
         UpdateSettingsSession();
     }
@@ -157,11 +159,25 @@ public partial class SettingsViewModel : ObservableObject
 
     public string ApplicationPathDescription => _localizer["ApplicationPathDescription"];
 
-    public string SubfoldersLabel => _localizer["IncludeSubfoldersLabel"];
-
     public string ScanSubfoldersLabel => _localizer["ScanSubfoldersLabel"];
 
     public string ScanSubfoldersDescription => _localizer["ScanSubfoldersDescription"];
+
+    public string ExcludedFoldersLabel => _localizer["ExcludedFoldersLabel"];
+
+    public string ExcludedFoldersDescription => _localizer["ExcludedFoldersDescription"];
+
+    public string RestoreFolderLabel => _localizer["RestoreFolderLabel"];
+
+    public string RestoreFolderInProgress => _localizer["RestoreFolderInProgress"];
+
+    public string RestoreFolderSuccess => _localizer["RestoreFolderSuccess"];
+
+    public string RestoreFolderScanDisabled => _localizer["RestoreFolderScanDisabled"];
+
+    public string RestoreFolderError => _localizer["RestoreFolderError"];
+
+    public string ExcludedFoldersLoadError => _localizer["ExcludedFoldersLoadError"];
 
     public bool ScanSubfolders
     {

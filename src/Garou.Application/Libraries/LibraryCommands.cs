@@ -69,6 +69,60 @@ public sealed class LibraryCommands(
         }
     }
 
+    public async Task<IReadOnlyList<string>> GetExcludedFoldersAsync(CancellationToken cancellationToken)
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var library in await libraries.GetAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            paths.UnionWith(await excludedFolders.GetPathsAsync(library.Id, cancellationToken).ConfigureAwait(false));
+        }
+
+        return paths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public async Task RestoreExcludedFolderAsync(string path, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var affected = new List<LibraryDefinition>();
+        foreach (var library in await libraries.GetAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var paths = await excludedFolders.GetPathsAsync(library.Id, cancellationToken).ConfigureAwait(false);
+            if (paths.Contains(fullPath, StringComparer.OrdinalIgnoreCase))
+            {
+                affected.Add(library);
+            }
+        }
+
+        if (affected.Count == 0)
+        {
+            throw new InvalidOperationException($"Folder '{fullPath}' is not excluded.");
+        }
+
+        if (!Directory.Exists(fullPath))
+        {
+            throw new DirectoryNotFoundException($"Folder '{fullPath}' is not accessible.");
+        }
+
+        foreach (var library in affected)
+        {
+            await excludedFolders.RemoveAsync(library.Id, fullPath, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await scanner.ScanAsync(library, progress, cancellationToken).ConfigureAwait(false);
+                if (!library.IsOnline)
+                {
+                    throw new DirectoryNotFoundException($"Library '{library.RootPath}' is not accessible.");
+                }
+            }
+            catch
+            {
+                await excludedFolders.AddAsync(library.Id, fullPath, CancellationToken.None).ConfigureAwait(false);
+                throw;
+            }
+        }
+    }
+
     public Task EnableLibraryAsync(Guid id, CancellationToken cancellationToken)
     {
         return libraries.SetEnabledAsync(id, true, cancellationToken);

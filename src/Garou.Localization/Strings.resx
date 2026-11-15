@@ -154,6 +154,15 @@
 	<data name="RemoveFolderFromLibrary" xml:space="preserve">
 	<value>Remove folder from library</value>
   </data>
+  <data name="RemoveFolderConfirmation" xml:space="preserve">
+	<value>Remove {0} and its subfolders from the library? Indexed items and cached thumbnails will be removed. Source files will not be deleted.</value>
+  </data>
+  <data name="RemoveFolderConfirm" xml:space="preserve">
+	<value>Remove</value>
+  </data>
+  <data name="CancelLabel" xml:space="preserve">
+	<value>Cancel</value>
+  </data>
   <data name="OpenContainingFolder" xml:space="preserve">
 	<value>Open containing folder</value>
   </data>
@@ -178,10 +187,7 @@
   <data name="MegabytesUnit" xml:space="preserve">
 	<value>MB</value>
   </data>
-  <data name="IncludeSubfoldersLabel" xml:space="preserve">
-	<value>Include items in subfolders when viewing a folder</value>
-  </data>
-	<data name="ScanSubfoldersLabel" xml:space="preserve">
+  <data name="ScanSubfoldersLabel" xml:space="preserve">
 	<value>Scan files in subfolders</value>
   </data>
   <data name="ScanSubfoldersDescription" xml:space="preserve">
@@ -229,4 +235,20 @@
   <data name="ErrorTitle" xml:space="preserve">
 	<value>Error</value>
   </data>
+  <data name="ExcludedFoldersLabel" xml:space="preserve"><value>Excluded folders</value></data>
+  <data name="ExcludedFoldersDescription" xml:space="preserve"><value>Restore a folder to rescan affected libraries. Other excluded folders and scan settings still apply.</value></data>
+  <data name="RestoreFolderLabel" xml:space="preserve"><value>Restore</value></data>
+  <data name="RestoreFolderInProgress" xml:space="preserve"><value>Restoring {0} and rescanning libraries...</value></data>
+  <data name="RestoreFolderSuccess" xml:space="preserve"><value>Exclusion removed and affected libraries rescanned. Other exclusions and scan settings still apply.</value></data>
+  <data name="RestoreFolderScanDisabled" xml:space="preserve"><value>Enable scanning subfolders before restoring an excluded folder.</value></data>
+  <data name="RestoreFolderError" xml:space="preserve"><value>Could not restore {0}: {1}</value></data>
+  <data name="ExcludedFoldersLoadError" xml:space="preserve"><value>Could not load excluded folders: {0}</value></data>
+  <data name="SlideshowTitle" xml:space="preserve"><value>Play slideshow</value></data>
+  <data name="SlideshowNoImages" xml:space="preserve"><value>There are no images in the current list.</value></data>
+  <data name="SlideshowPrevious" xml:space="preserve"><value>Previous</value></data>
+  <data name="SlideshowNext" xml:space="preserve"><value>Next</value></data>
+  <data name="SlideshowPause" xml:space="preserve"><value>Pause</value></data>
+  <data name="SlideshowResume" xml:space="preserve"><value>Resume</value></data>
+  <data name="SlideshowLoading" xml:space="preserve"><value>Loading...</value></data>
+  <data name="SlideshowLoadError" xml:space="preserve"><value>Could not display {0}: {1}</value></data>
 </root>

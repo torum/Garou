@@ -92,8 +92,21 @@
                         <CheckBox Content="{Binding Settings.ScanSubfoldersLabel}"
                                   IsChecked="{Binding Settings.ScanSubfolders, Mode=TwoWay}" />
                         <TextBlock Text="{Binding Settings.ScanSubfoldersDescription}" TextWrapping="Wrap" Opacity="0.75" />
-                        <CheckBox Content="{Binding Settings.SubfoldersLabel}"
-                                  IsChecked="{Binding IncludeDescendants, Mode=TwoWay}" />
+                        <TextBlock Text="{Binding Settings.ExcludedFoldersLabel}" FontWeight="SemiBold" Margin="0,12,0,0" />
+                        <TextBlock Text="{Binding Settings.ExcludedFoldersDescription}" TextWrapping="Wrap" Opacity="0.75" />
+                        <ItemsControl ItemsSource="{Binding ExcludedFolders}" IsEnabled="{Binding !IsScanning}"
+                                      Tag="{Binding Settings.RestoreFolderLabel}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,4">
+                                        <TextBlock Text="{Binding}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Content="{Binding Tag, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                Click="OnRestoreFolderClick" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

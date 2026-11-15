@@ -126,6 +126,64 @@ public sealed class LibraryCommandsTests : IDisposable
     }
 
     [Fact]
+    public async Task WhenExcludedFolderIsRestoredThenEveryAffectedLibraryIsScannedAndOtherExclusionsRemain()
+    {
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
+        var root = Path.Combine(Path.GetTempPath(), $"restore-{Guid.NewGuid():N}");
+        var nestedRoot = Path.Combine(root, "nested");
+        var excluded = Path.Combine(nestedRoot, "excluded");
+        var child = Path.Combine(excluded, "child");
+        Directory.CreateDirectory(child);
+        try
+        {
+            var rootId = await _commands.AddLibraryAsync(root, CancellationToken.None);
+            var nestedId = await _commands.AddLibraryAsync(nestedRoot, CancellationToken.None);
+            await _commands.ExcludeFolderAsync(excluded, CancellationToken.None);
+            await _commands.ExcludeFolderAsync(child, CancellationToken.None);
+            var listed = await _commands.GetExcludedFoldersAsync(CancellationToken.None);
+            Assert.Equal(2, listed.Count);
+            Assert.Contains(excluded, listed);
+            Assert.Contains(child, listed);
+            var scanner = new RecordingLibraryScanner();
+            var commands = new LibraryCommands(_repository, _excludedFolders, scanner);
+
+            await commands.RestoreExcludedFolderAsync(excluded + Path.DirectorySeparatorChar, null, CancellationToken.None);
+
+            Assert.Equal(new[] { rootId, nestedId }.OrderBy(id => id), scanner.Scanned.Select(library => library.Id).OrderBy(id => id));
+            Assert.Equal(child, Assert.Single(await _excludedFolders.GetPathsAsync(rootId, CancellationToken.None)));
+            Assert.Equal(child, Assert.Single(await _excludedFolders.GetPathsAsync(nestedId, CancellationToken.None)));
+            Assert.Equal(child, Assert.Single(await commands.GetExcludedFoldersAsync(CancellationToken.None)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenRestoreScanFailsThenExclusionRemainsForRetry()
+    {
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
+        var root = Path.Combine(Path.GetTempPath(), $"restore-failure-{Guid.NewGuid():N}");
+        var excluded = Path.Combine(root, "excluded");
+        Directory.CreateDirectory(excluded);
+        try
+        {
+            var id = await _commands.AddLibraryAsync(root, CancellationToken.None);
+            await _commands.ExcludeFolderAsync(excluded, CancellationToken.None);
+            var commands = new LibraryCommands(_repository, _excludedFolders, new FailingLibraryScanner());
+
+            await Assert.ThrowsAsync<IOException>(() => commands.RestoreExcludedFolderAsync(excluded, null, CancellationToken.None));
+
+            Assert.Equal(excluded, Assert.Single(await _excludedFolders.GetPathsAsync(id, CancellationToken.None)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task WhenLibraryIsRefreshedThenItIsScanned()
     {
         await new DatabaseInitializer(_connectionFactory).InitializeAsync(CancellationToken.None);
@@ -161,6 +219,12 @@ public sealed class LibraryCommandsTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             commands.RefreshLibraryAsync(Guid.CreateVersion7(), null, CancellationToken.None));
+    }
+
+    private sealed class FailingLibraryScanner : ILibraryScanner
+    {
+        public Task ScanAsync(LibraryDefinition library, IProgress<ScanProgress>? progress, CancellationToken cancellationToken) =>
+            throw new IOException("Scan failed");
     }
 
     private sealed class RecordingLibraryScanner : ILibraryScanner

@@ -21,6 +21,15 @@ public partial class SettingsPage : UserControl
         if (DataContext is MainViewModel viewModel)
         {
             await viewModel.Settings.LoadAsync(CancellationToken.None);
+            await viewModel.LoadExcludedFoldersAsync(CancellationToken.None);
+        }
+    }
+
+    private async void OnRestoreFolderClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: string path } && DataContext is MainViewModel viewModel)
+        {
+            await viewModel.RestoreExcludedFolderAsync(path, CancellationToken.None);
         }
     }
 

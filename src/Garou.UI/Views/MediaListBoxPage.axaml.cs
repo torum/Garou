@@ -55,6 +55,7 @@ public partial class MediaListBoxPage : UserControl
         var localizer = new ResourceLocalizer(
             CultureInfo.GetCultureInfo(settings.Language == "ja" ? "ja" : "en"));
 
+        ToolTip.SetTip(SlideshowPlay, localizer["SlideshowTitle"]);
         ToolTip.SetTip(DetailsPaneToggleButton, localizer["TooltipOpenDetailsPane"]);
         ToolTip.SetTip(ThumbnailSizeSlider, localizer["TooltipAdjustThumbnailSize"]);
         ToolTip.SetTip(ShowFileNamesToggleButton, localizer["TooltipShowFilenames"]);
@@ -106,6 +107,30 @@ public partial class MediaListBoxPage : UserControl
             viewModel.OnVisibleItemsChanged(
                 items.OfType<MediaItemViewModel>().Select(item => item.File).ToList());
         }
+    }
+
+    private void OnSlideshowPlayClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        var localizer = new ResourceLocalizer(
+            CultureInfo.GetCultureInfo(_settingsSession.Current.Language == "ja" ? "ja" : "en"));
+        var images = viewModel.Items.Where(item => item.MediaType == MediaType.Image)
+            .Select(item => item.File).ToArray();
+        if (images.Length == 0)
+        {
+            viewModel.StatusText = localizer["SlideshowNoImages"];
+            viewModel.ReportError(viewModel.StatusText);
+            return;
+        }
+
+        var selectedIndex = Array.FindIndex(images, image => image == viewModel.SelectedItem?.File);
+        var window = new SlideshowWindow(images, Math.Max(0, selectedIndex), localizer,
+            App.Services.GetRequiredService<Garou.Infrastructure.Thumbnails.FfmpegRunner>());
+        window.Show(owner);
     }
 
     private void OnMediaDoubleTapped(object? sender, TappedEventArgs e)

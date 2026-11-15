@@ -154,6 +154,15 @@
 	<data name="RemoveFolderFromLibrary" xml:space="preserve">
 	<value>ライブラリからフォルダーを削除</value>
   </data>
+  <data name="RemoveFolderConfirmation" xml:space="preserve">
+	<value>{0} とそのサブフォルダーをライブラリから削除しますか？インデックスされた項目とサムネイルキャッシュが削除されます。元のファイルは削除されません。</value>
+  </data>
+  <data name="RemoveFolderConfirm" xml:space="preserve">
+	<value>削除</value>
+  </data>
+  <data name="CancelLabel" xml:space="preserve">
+	<value>キャンセル</value>
+  </data>
   <data name="OpenContainingFolder" xml:space="preserve">
 	<value>保存先フォルダーを開く</value>
   </data>
@@ -178,10 +187,7 @@
   <data name="MegabytesUnit" xml:space="preserve">
 	<value>MB</value>
   </data>
-  <data name="IncludeSubfoldersLabel" xml:space="preserve">
-	<value>フォルダー表示時にサブフォルダーの項目を含める</value>
-  </data>
-	<data name="ScanSubfoldersLabel" xml:space="preserve">
+  <data name="ScanSubfoldersLabel" xml:space="preserve">
 	<value>サブフォルダー内のファイルもスキャンする</value>
   </data>
   <data name="ScanSubfoldersDescription" xml:space="preserve">
@@ -229,4 +235,20 @@
   <data name="ErrorTitle" xml:space="preserve">
 	<value>エラー</value>
   </data>
+  <data name="ExcludedFoldersLabel" xml:space="preserve"><value>除外されたフォルダー</value></data>
+  <data name="ExcludedFoldersDescription" xml:space="preserve"><value>フォルダーを復元すると、関連するライブラリを再スキャンします。他の除外フォルダーやスキャン設定は引き続き適用されます。</value></data>
+  <data name="RestoreFolderLabel" xml:space="preserve"><value>復元</value></data>
+  <data name="RestoreFolderInProgress" xml:space="preserve"><value>{0}を復元し、ライブラリを再スキャンしています...</value></data>
+  <data name="RestoreFolderSuccess" xml:space="preserve"><value>除外を解除し、関連するライブラリを再スキャンしました。他の除外設定やスキャン設定は引き続き適用されます。</value></data>
+  <data name="RestoreFolderScanDisabled" xml:space="preserve"><value>除外フォルダーを復元する前に、サブフォルダーのスキャンを有効にしてください。</value></data>
+  <data name="RestoreFolderError" xml:space="preserve"><value>{0}を復元できません: {1}</value></data>
+  <data name="ExcludedFoldersLoadError" xml:space="preserve"><value>除外フォルダーを読み込めません: {0}</value></data>
+  <data name="SlideshowTitle" xml:space="preserve"><value>スライドショーを再生</value></data>
+  <data name="SlideshowNoImages" xml:space="preserve"><value>現在の一覧に画像がありません。</value></data>
+  <data name="SlideshowPrevious" xml:space="preserve"><value>前へ</value></data>
+  <data name="SlideshowNext" xml:space="preserve"><value>次へ</value></data>
+  <data name="SlideshowPause" xml:space="preserve"><value>一時停止</value></data>
+  <data name="SlideshowResume" xml:space="preserve"><value>再開</value></data>
+  <data name="SlideshowLoading" xml:space="preserve"><value>読み込み中...</value></data>
+  <data name="SlideshowLoadError" xml:space="preserve"><value>{0}を表示できません: {1}</value></data>
 </root>

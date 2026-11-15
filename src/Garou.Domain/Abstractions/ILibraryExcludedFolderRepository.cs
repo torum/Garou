@@ -5,4 +5,6 @@ public interface ILibraryExcludedFolderRepository
     Task<IReadOnlyList<string>> GetPathsAsync(Guid libraryId, CancellationToken cancellationToken);
 
     Task AddAsync(Guid libraryId, string path, CancellationToken cancellationToken);
+
+    Task RemoveAsync(Guid libraryId, string path, CancellationToken cancellationToken);
 }

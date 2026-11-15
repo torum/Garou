@@ -7,6 +7,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using FluentAvalonia.UI.Controls;
 using Garou.Application.Queries;
 using Garou.Domain.Models;
 using Garou.Infrastructure.Settings;
@@ -333,7 +334,26 @@ public partial class MainWindow : Window
     {
         if (sender is MenuItem { DataContext: FolderNode node } && DataContext is MainViewModel viewModel)
         {
-            await viewModel.RemoveFolderAsync(node, CancellationToken.None);
+            var settings = _settingsSession.Current;
+            var localizer = new ResourceLocalizer(CultureInfo.GetCultureInfo(settings.Language == "ja" ? "ja" : "en"));
+            var dialog = new FAContentDialog
+            {
+                Title = localizer["RemoveFolderFromLibrary"],
+                Content = new TextBlock
+                {
+                    Text = string.Format(localizer["RemoveFolderConfirmation"], node.PathText),
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                },
+                PrimaryButtonText = localizer["RemoveFolderConfirm"],
+                CloseButtonText = localizer["CancelLabel"],
+                DefaultButton = FAContentDialogButton.Close
+            };
+
+            if (await dialog.ShowAsync(this) == FAContentDialogResult.Primary)
+            {
+                await viewModel.RemoveFolderAsync(node, CancellationToken.None);
+            }
+
             return;
         }
 
