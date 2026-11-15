@@ -106,7 +106,7 @@
         <Border Grid.Row="0" Grid.Column="2" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"/>
 
         <!-- Error Infobar -->
-		<Grid Grid.Row="1">
+		<Grid Grid.Row="1" Grid.ColumnSpan="3">
 			<ui:FAInfoBar Title="{Binding InfoBarErrorTitle}" IsOpen="{Binding IsInfoBarOpen, Mode=TwoWay}" IsIconVisible="True" IsClosable="True" Severity="Error" Message="{Binding InfoBarErrorMessage}" />
 		</Grid>
 
@@ -114,7 +114,7 @@
         <Grid Grid.Row="2" Grid.Column="0" ColumnDefinitions="*,Auto" Margin="4,0,0,0">
             <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Opacity="0.7" Margin="4" />
         </Grid>
-        <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="2" Grid.Column="2" ColumnDefinitions="*,Auto">
             <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto" Margin="8,0,0,0">
                 <TextBlock Grid.Column="0" Text="{Binding ThumbnailStatusText}" VerticalAlignment="Center" Margin="4" Opacity="0.7" />
                 <TextBlock Grid.Column="1" Text="{Binding ScanStatusText}" VerticalAlignment="Center" IsVisible="{Binding IsScanning}" Margin="4" Opacity="0.7"/>

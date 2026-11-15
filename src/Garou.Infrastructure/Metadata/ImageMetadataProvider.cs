@@ -1,3 +1,4 @@
+using System.Text;
 using Garou.Domain.Abstractions;
 using Garou.Domain.Models;
 using MetadataExtractor;
@@ -11,6 +12,11 @@ public sealed class ImageMetadataProvider : IMediaMetadataProvider
     {
         ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".heic"
     };
+
+    static ImageMetadataProvider()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
 
     public bool Supports(string extension) => SupportedExtensions.Contains(extension);
 

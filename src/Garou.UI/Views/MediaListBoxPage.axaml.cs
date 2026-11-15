@@ -292,7 +292,7 @@ public partial class MediaListBoxPage : UserControl
 
     private void OnOpenContainingFolderClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is MenuItem { DataContext: MediaItemViewModel { File: var mediaFile } })
+        if (sender is Button { DataContext: MediaItemViewModel { File: var mediaFile } })
         {
             OpenFileLocation(mediaFile.Path);
         }
@@ -300,7 +300,7 @@ public partial class MediaListBoxPage : UserControl
 
     private void OnOpenThumbnailFolderClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is not MenuItem
+        if (sender is not Button
             {
                 DataContext: MediaItemViewModel { File.ThumbnailPath: { } thumbnailPath }
             })

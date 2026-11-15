@@ -124,6 +124,27 @@ public sealed class MediaQueryBuilderTests
     }
 
     [Fact]
+    public void WhenComparingNamesWithDifferentCaseAndNumbersThenComparisonIsNatural()
+    {
+        var sorted = new[] { "photo10.jpg", "Photo2.jpg", "photo1.jpg" }
+            .OrderBy(name => name, LogicalFileNameComparer.Instance);
+
+        Assert.Equal(["photo1.jpg", "Photo2.jpg", "photo10.jpg"], sorted);
+    }
+
+    [Fact]
+    public void WhenNonWindowsNamesHaveLeadingZeroesThenNumbersAreComparedNumerically()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Assert.True(LogicalFileNameComparer.Instance.Compare("photo09.jpg", "photo2.jpg") > 0);
+        Assert.True(LogicalFileNameComparer.Instance.Compare("photo99999999999999999999.jpg", "photo100000000000000000000.jpg") < 0);
+    }
+
+    [Fact]
     public void WhenPageSizeExceedsLimitThenItIsClamped()
     {
         var built = MediaQueryBuilder.Build(CreateQuery() with { PageSize = 100_000 });

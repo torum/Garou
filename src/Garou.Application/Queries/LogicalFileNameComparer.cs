@@ -32,21 +32,11 @@ public sealed class LogicalFileNameComparer : IComparer<string>
             return StrCmpLogicalW(x, y);
         }
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-            return StrVersCmp(x, y);
-        }
-
         return CompareNaturally(x, y);
     }
 
     [DllImport("Shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int StrCmpLogicalW(string x, string y);
-
-    [DllImport("libc", EntryPoint = "strverscmp", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int StrVersCmp(
-        [MarshalAs(UnmanagedType.LPUTF8Str)] string x,
-        [MarshalAs(UnmanagedType.LPUTF8Str)] string y);
 
     private static int CompareNaturally(string x, string y)
     {

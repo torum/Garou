@@ -32,6 +32,17 @@ public sealed class MetadataExtractionTests
     }
 
     [Fact]
+    public void WhenExifUserCommentUsesShiftJisThenItIsDecoded()
+    {
+        var exif = new ExifSubIfdDirectory();
+        exif.Set(ExifDirectoryBase.TagUserComment, new byte[] { 0x4A, 0x49, 0x53, 0, 0, 0, 0, 0, 0x82, 0xA0 });
+
+        var metadata = ImageMetadataProvider.ExtractMetadata([exif]);
+
+        Assert.Contains(metadata.Tags, tag => tag.Name == "User Comment" && tag.Value == "\u3042");
+    }
+
+    [Fact]
     public void WhenVideoExtensionSupportedThenVideoProviderSupportsMp4()
     {
         var provider = new VideoMetadataProvider("ffprobe");

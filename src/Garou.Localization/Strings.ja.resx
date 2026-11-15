@@ -82,6 +82,12 @@
   <data name="GeneralTabLabel" xml:space="preserve">
     <value>一般</value>
   </data>
+  <data name="SortFilesByFolderLabel" xml:space="preserve">
+    <value>フォルダーごとにファイルを並べ替える</value>
+  </data>
+  <data name="SortFilesByFolderDescription" xml:space="preserve">
+    <value>オフの場合はすべてのファイル名をまとめて並べ替えます。オンの場合はフォルダーごとに並べ替えます。</value>
+  </data>
   <data name="ApplicationsTabLabel" xml:space="preserve">
     <value>アプリケーション</value>
   </data>

@@ -61,6 +61,8 @@ public sealed class MediaQueryService(
 
         return all
             .Where(folder => folder.ParentId is null || !all.Any(parent => parent.Id == folder.ParentId))
+            .OrderBy(folder => folder.Path, LogicalFileNameComparer.Instance)
+            .ThenBy(folder => folder.Path, StringComparer.Ordinal)
             .Select(folder => BuildNode(folder, childrenByParent, isRoot: true))
             .ToList();
     }
@@ -68,7 +70,9 @@ public sealed class MediaQueryService(
     private static FolderNode BuildNode(Folder folder, IReadOnlyDictionary<Guid, List<Folder>> childrenByParent, bool isRoot)
     {
         var children = childrenByParent.TryGetValue(folder.Id, out var list)
-            ? list.Select(child => BuildNode(child, childrenByParent, isRoot: false)).ToList()
+            ? list.OrderBy(child => Path.GetFileName(Path.TrimEndingDirectorySeparator(child.Path)), LogicalFileNameComparer.Instance)
+                .ThenBy(child => child.Path, StringComparer.Ordinal)
+                .Select(child => BuildNode(child, childrenByParent, isRoot: false)).ToList()
             : [];
 
         return new FolderNode(folder, children, isRoot);

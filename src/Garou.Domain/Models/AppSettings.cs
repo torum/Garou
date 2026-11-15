@@ -14,7 +14,7 @@ public sealed class AppSettings
 
     public List<Guid> ExpandedFolderIds { get; set; } = [];
 
-    public bool IsDetailsPaneOpen { get; set; } = true;
+    public bool IsDetailsPaneOpen { get; set; } = false;
 
     public double ThumbnailSize { get; set; } = 120;
 
@@ -25,6 +25,8 @@ public sealed class AppSettings
     public bool ShowFileNames { get; set; } = true;
 
     public bool ShowFileTypeBadges { get; set; } = true;
+
+    public bool SortFilesByFolder { get; set; }
 
     public bool IncludeDescendants { get; set; } = true;
 

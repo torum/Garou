@@ -69,6 +69,9 @@ public sealed class SettingsStore(string settingsFilePath)
                 ShowFileTypeBadges = bool.TryParse(root?.Element("ShowFileTypeBadges")?.Value, out var showFileTypeBadges)
                     ? showFileTypeBadges
                     : new AppSettings().ShowFileTypeBadges,
+                SortFilesByFolder = bool.TryParse(root?.Element("SortFilesByFolder")?.Value, out var sortFilesByFolder)
+                    ? sortFilesByFolder
+                    : new AppSettings().SortFilesByFolder,
                 IncludeDescendants = bool.TryParse(root?.Element("IncludeDescendants")?.Value, out var includeDescendants)
                     ? includeDescendants
                     : new AppSettings().IncludeDescendants,
@@ -138,6 +141,7 @@ public sealed class SettingsStore(string settingsFilePath)
                     new XElement("DetailsPaneWidth", settings.DetailsPaneWidth.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ShowFileNames", settings.ShowFileNames.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ShowFileTypeBadges", settings.ShowFileTypeBadges.ToString(CultureInfo.InvariantCulture)),
+                    new XElement("SortFilesByFolder", settings.SortFilesByFolder.ToString(CultureInfo.InvariantCulture)),
                     new XElement("IncludeDescendants", settings.IncludeDescendants.ToString(CultureInfo.InvariantCulture)),
                     new XElement("IncludeImages", settings.IncludeImages.ToString(CultureInfo.InvariantCulture)),
                     new XElement("IncludeVideos", settings.IncludeVideos.ToString(CultureInfo.InvariantCulture)),

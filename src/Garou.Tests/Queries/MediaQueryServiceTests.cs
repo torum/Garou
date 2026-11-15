@@ -85,6 +85,22 @@ public sealed class MediaQueryServiceTests
     }
 
     [Fact]
+    public async Task WhenFoldersContainNumbersThenSiblingsAreSortedNaturally()
+    {
+        var root = new Folder { Path = Path.Combine(Path.GetTempPath(), "Photos") };
+        var folder10 = new Folder { Path = Path.Combine(root.Path, "folder10"), ParentId = root.Id };
+        var folder2 = new Folder { Path = Path.Combine(root.Path, "folder2"), ParentId = root.Id };
+        var folder1 = new Folder { Path = Path.Combine(root.Path, "folder1"), ParentId = root.Id };
+        var service = new MediaQueryService(new FakeMediaSearch([]), new FakeMediaFiles(),
+            new FakeFolders([folder10, root, folder2, folder1]));
+
+        var tree = await service.GetFolderTreeAsync(CancellationToken.None);
+
+        Assert.Equal([folder1.Id, folder2.Id, folder10.Id],
+            Assert.Single(tree).Children.Select(child => child.Folder.Id));
+    }
+
+    [Fact]
     public async Task WhenFolderParentIsMissingThenFolderIsRoot()
     {
         var folders = new FakeFolders([new Folder { Path = "D:\\Orphan", ParentId = Guid.CreateVersion7() }]);

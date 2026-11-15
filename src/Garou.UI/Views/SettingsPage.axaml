@@ -7,13 +7,17 @@
         <TabControl Grid.Row="0">
             <TabItem Header="{Binding Settings.GeneralTabLabel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="8" Margin="0,12,0,0">
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="8" Margin="0,12,0,0">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Settings.LanguageLabel}" VerticalAlignment="Center" />
                         <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Settings.SupportedLanguages}"
                                   SelectedItem="{Binding Settings.SelectedLanguage, Mode=TwoWay}" />
                         <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Settings.ThemeLabel}" VerticalAlignment="Center" />
                         <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Settings.ThemeOptions}"
                                   SelectedIndex="{Binding Settings.SelectedThemeIndex, Mode=TwoWay}" />
+                        <CheckBox Grid.Row="2" Grid.ColumnSpan="2" Content="{Binding Settings.SortFilesByFolderLabel}"
+                                  IsChecked="{Binding SortFilesByFolder, Mode=TwoWay}" />
+                        <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Text="{Binding Settings.SortFilesByFolderDescription}"
+                                   TextWrapping="Wrap" Opacity="0.75" />
                     </Grid>
                 </ScrollViewer>
             </TabItem>

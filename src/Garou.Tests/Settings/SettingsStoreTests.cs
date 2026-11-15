@@ -193,6 +193,30 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(loaded.IncludeDescendants);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WhenFolderSortPreferenceIsSavedThenItIsRestored(bool sortByFolder)
+    {
+        var store = new SettingsStore(_settingsPath);
+        await store.SaveAsync(new AppSettings { SortFilesByFolder = sortByFolder }, CancellationToken.None);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(sortByFolder, loaded.SortFilesByFolder);
+    }
+
+    [Fact]
+    public async Task WhenFolderSortPreferenceIsMissingThenGlobalSortIsUsed()
+    {
+        await File.WriteAllTextAsync(_settingsPath, "<Settings />", TestContext.Current.CancellationToken);
+        var store = new SettingsStore(_settingsPath);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.False(loaded.SortFilesByFolder);
+    }
+
     [Fact]
     public async Task WhenFileTypeBadgePreferenceIsSavedThenItIsPreserved()
     {

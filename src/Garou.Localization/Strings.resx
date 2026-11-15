@@ -82,6 +82,12 @@
   <data name="GeneralTabLabel" xml:space="preserve">
     <value>General</value>
   </data>
+  <data name="SortFilesByFolderLabel" xml:space="preserve">
+    <value>Sort files by folder</value>
+  </data>
+  <data name="SortFilesByFolderDescription" xml:space="preserve">
+    <value>When off, all filenames are sorted together. When on, files are sorted within each folder.</value>
+  </data>
   <data name="ApplicationsTabLabel" xml:space="preserve">
     <value>Applications</value>
   </data>

@@ -102,8 +102,6 @@
                                 <Separator />
                                 <MenuItem Header="Open with viewer" Tag="viewer" Click="OnLaunchWithViewerClick" />
                                 <MenuItem Header="Open with editor" Tag="editor" Click="OnLaunchWithEditorClick" />
-                                <MenuItem Header="Open containing folder" Tag="OpenContainingFolder" Click="OnOpenContainingFolderClick" />
-                                <MenuItem Header="Open thumbnail cache folder" Tag="OpenThumbnailCacheFolder" Click="OnOpenThumbnailFolderClick" />
                             </MenuFlyout>
                         </Border.ContextFlyout>
                         <StackPanel Spacing="4">
@@ -266,11 +264,9 @@
                 <StackPanel Margin="16" Spacing="8" DataContext="{Binding SelectedItem}" x:DataType="vm:MediaItemViewModel">
                     <SelectableTextBlock Text="{Binding FileName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <SelectableTextBlock Text="{Binding File.Path}" Opacity="0.75" TextWrapping="Wrap" />
+                    <Button Content="Open containing folder" Click="OnOpenContainingFolderClick" />
+
                     <Separator Margin="0,8" />
-                    <Grid ColumnDefinitions="96,8,*">
-                        <SelectableTextBlock Text="ID" Opacity="0.65" />
-                        <SelectableTextBlock Grid.Column="2" Text="{Binding IdText}" TextWrapping="Wrap" />
-                    </Grid>
                     <Grid ColumnDefinitions="96,8,*">
                         <SelectableTextBlock Text="Type" Opacity="0.65" />
                         <SelectableTextBlock Grid.Column="2" Text="{Binding MediaTypeText}" TextWrapping="Wrap" />
@@ -282,6 +278,10 @@
                     <Grid ColumnDefinitions="96,8,*">
                         <SelectableTextBlock Text="Size" Opacity="0.65" />
                         <SelectableTextBlock Grid.Column="2" Text="{Binding FileSizeText}" TextWrapping="Wrap" />
+                    </Grid>
+                    <Grid ColumnDefinitions="96,8,*">
+                        <SelectableTextBlock Text="ID" Opacity="0.65" />
+                        <SelectableTextBlock Grid.Column="2" Text="{Binding IdText}" TextWrapping="Wrap" />
                     </Grid>
                     <StackPanel Spacing="8" IsVisible="{Binding ShowsDetailedMetadata}">
                         <Separator Margin="0,8" />
@@ -320,7 +320,10 @@
                     </Grid>
                     <Grid ColumnDefinitions="96,8,*">
                         <SelectableTextBlock Text="Thumbnail" Opacity="0.65" />
-                        <SelectableTextBlock Grid.Column="2" Text="{Binding ThumbnailPathText}" TextWrapping="Wrap" />
+                        <SelectableTextBlock Grid.Row="0" Grid.Column="2" Text="{Binding ThumbnailPathText}" TextWrapping="Wrap" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*">
+                        <Button Content="Open thumbnail cache folder" Click="OnOpenThumbnailFolderClick" />
                     </Grid>
                 </StackPanel>
             </ScrollViewer>

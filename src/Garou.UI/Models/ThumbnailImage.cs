@@ -53,8 +53,7 @@ public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
         }
 
         _disposed = true;
-        _bitmap?.Dispose();
-        _bitmap = null;
+        Bitmap = null;
     }
 
     private async Task LoadAsync(string path)
@@ -64,7 +63,7 @@ public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
             var bitmap = await Task.Run(() =>
             {
                 using var stream = File.OpenRead(path);
-                return new Bitmap(stream);
+                return new ThumbnailBitmap(stream);
             }).ConfigureAwait(true);
 
             if (_disposed)
@@ -80,6 +79,31 @@ public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
         {
             State = ThumbnailLoadState.Failed;
             Debug.WriteLine($"[ThumbnailImage] Failed to load '{path}': {exception.GetType().Name} {exception.Message}");
+        }
+    }
+
+    // A transitioning or recycled visual can retain the bitmap after its model is disposed.
+    private sealed class ThumbnailBitmap : Bitmap
+    {
+        private readonly bool _initialized;
+
+        public ThumbnailBitmap(Stream stream) : base(stream)
+        {
+            _initialized = true;
+        }
+
+        ~ThumbnailBitmap()
+        {
+            if (_initialized)
+            {
+                base.Dispose();
+            }
+        }
+
+        public override void Dispose()
+        {
+            base.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

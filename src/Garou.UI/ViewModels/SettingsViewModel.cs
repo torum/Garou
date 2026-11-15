@@ -67,6 +67,8 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(LanguageLabel));
         OnPropertyChanged(nameof(ThemeLabel));
         OnPropertyChanged(nameof(ThemeOptions));
+        OnPropertyChanged(nameof(SortFilesByFolderLabel));
+        OnPropertyChanged(nameof(SortFilesByFolderDescription));
         OnPropertyChanged(nameof(ExtensionsLabel));
         OnPropertyChanged(nameof(ExtensionsDescription));
         OnPropertyChanged(nameof(ExtensionGroups));
@@ -94,6 +96,10 @@ public partial class SettingsViewModel : ObservableObject
     public string LanguageLabel => _localizer["LanguageLabel"];
 
     public string ThemeLabel => _localizer["ThemeLabel"];
+
+    public string SortFilesByFolderLabel => _localizer["SortFilesByFolderLabel"];
+
+    public string SortFilesByFolderDescription => _localizer["SortFilesByFolderDescription"];
 
     public IReadOnlyList<string> ThemeOptions =>
     [

@@ -158,6 +158,18 @@ public partial class MainViewModel(
     }
 
     [ObservableProperty]
+    public partial bool SortFilesByFolder { get; set; }
+
+    partial void OnSortFilesByFolderChanged(bool value)
+    {
+        UpdateSettingsSession();
+        if (!_isInitializing)
+        {
+            ScheduleReload(0);
+        }
+    }
+
+    [ObservableProperty]
     public partial bool IncludeDescendants { get; set; } = true;
 
     partial void OnIncludeDescendantsChanged(bool value)
@@ -586,6 +598,7 @@ public partial class MainViewModel(
         IsDetailsPaneOpen = appSettings.IsDetailsPaneOpen;
         ShowFileNames = appSettings.ShowFileNames;
         ShowFileTypeBadges = appSettings.ShowFileTypeBadges;
+        SortFilesByFolder = appSettings.SortFilesByFolder;
         IncludeDescendants = appSettings.IncludeDescendants;
         IncludeImages = appSettings.IncludeImages;
         IncludeVideos = appSettings.IncludeVideos;
@@ -1144,6 +1157,7 @@ public partial class MainViewModel(
         appSettings.IsDetailsPaneOpen = IsDetailsPaneOpen;
         appSettings.ShowFileNames = ShowFileNames;
         appSettings.ShowFileTypeBadges = ShowFileTypeBadges;
+        appSettings.SortFilesByFolder = SortFilesByFolder;
         appSettings.IncludeDescendants = IncludeDescendants;
         appSettings.IncludeImages = IncludeImages;
         appSettings.IncludeVideos = IncludeVideos;
@@ -1172,8 +1186,8 @@ public partial class MainViewModel(
             }
 
             var files = await queries.SearchAllAsync(CreateQuery(folderId), cancellationToken);
-            var items = await Task.Run(() => files
-                .OrderBy(file => file.FileName, LogicalFileNameComparer.Instance)
+            var sortByFolder = SortFilesByFolder;
+            var items = await Task.Run(() => MediaFileHierarchySorter.Sort(files, sortByFolder)
                 .Select(file => new MediaItemViewModel(file))
                 .ToArray(), cancellationToken);
             _items.ReplaceAll(items);
