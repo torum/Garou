@@ -16,6 +16,8 @@ public interface IMediaFileRepository
 
     Task UpsertBatchAsync(IReadOnlyList<MediaFile> mediaFiles, CancellationToken cancellationToken);
 
+    Task<bool> MoveAsync(string oldPath, MediaFile updatedFile, CancellationToken cancellationToken);
+
     Task UpdateThumbnailPathAsync(Guid mediaFileId, string? thumbnailPath, CancellationToken cancellationToken);
 
     Task DeleteByPathAsync(string path, CancellationToken cancellationToken);

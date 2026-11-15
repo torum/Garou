@@ -28,14 +28,15 @@ public sealed class ThumbnailGeneratorService(
             return null;
         }
 
-        var thumbnailPath = Path.Combine(thumbnailDirectory, ThumbnailFileName(mediaFile.Path, thumbnailSize));
+        var sourceThumbnailDirectory = Path.Combine(thumbnailDirectory, ThumbnailFolderName(mediaFile.Path));
+        var thumbnailPath = Path.Combine(sourceThumbnailDirectory, ThumbnailFileName(mediaFile.Path, thumbnailSize));
         if (File.Exists(thumbnailPath))
         {
             await RegisterThumbnailAsync(thumbnailPath, cancellationToken).ConfigureAwait(false);
             return thumbnailPath;
         }
 
-        Directory.CreateDirectory(thumbnailDirectory);
+        Directory.CreateDirectory(sourceThumbnailDirectory);
 
         var arguments = BuildArguments(mediaFile, thumbnailPath, thumbnailSize);
         var succeeded = await ffmpeg.RunAsync(arguments, cancellationToken).ConfigureAwait(false);
@@ -64,10 +65,11 @@ public sealed class ThumbnailGeneratorService(
         ArgumentNullException.ThrowIfNull(mediaFile);
 
         var thumbnailPrefix = ThumbnailFilePrefix(mediaFile.Path);
+        var sourceThumbnailDirectory = Path.Combine(thumbnailDirectory, ThumbnailFolderName(mediaFile.Path));
         var thumbnailPaths = new HashSet<string>(StringComparer.Ordinal);
-        if (Directory.Exists(thumbnailDirectory))
+        if (Directory.Exists(sourceThumbnailDirectory))
         {
-            foreach (var path in Directory.EnumerateFiles(thumbnailDirectory, $"{thumbnailPrefix}*.jpg"))
+            foreach (var path in Directory.EnumerateFiles(sourceThumbnailDirectory, $"{thumbnailPrefix}*.jpg"))
             {
                 thumbnailPaths.Add(path);
             }
@@ -100,6 +102,14 @@ public sealed class ThumbnailGeneratorService(
         {
             throw new IOException("One or more thumbnail files could not be deleted.", deletionFailure);
         }
+    }
+
+    internal static string ThumbnailFolderName(string filePath)
+    {
+        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(filePath))
+            ?? throw new ArgumentException("The media file path must have a parent directory.", nameof(filePath));
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sourceDirectory));
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     internal static string ThumbnailFileName(string fullFilePath)

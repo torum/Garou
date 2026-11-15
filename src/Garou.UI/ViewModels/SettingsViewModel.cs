@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Garou.Application.Queries;
 using Garou.Domain.Models;
 using Garou.Localization;
 using Garou.Infrastructure.Settings;
@@ -31,6 +32,9 @@ public partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(AppSettingsSession settingsSession)
     {
         _settingsSession = settingsSession;
+        SearchFieldOptions = Enum.GetValues<MediaSearchField>()
+            .Select(field => new SearchFieldOption(field, _localizer[$"SearchField{field}"]))
+            .ToArray();
         Extensions = new ObservableCollection<ExtensionPreferenceViewModel>(
             MediaFileExtensions.All.Select(extension => new ExtensionPreferenceViewModel(extension, true)));
         foreach (var extension in Extensions)
@@ -47,6 +51,8 @@ public partial class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<string> SupportedLanguages { get; } = ["en", "ja"];
 
+    public IReadOnlyList<SearchFieldOption> SearchFieldOptions { get; }
+
     public ObservableCollection<ExtensionPreferenceViewModel> Extensions { get; }
 
     public IReadOnlyList<ExtensionPreferenceGroupViewModel> ExtensionGroups =>
@@ -62,8 +68,16 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnSelectedLanguageChanged(string value)
     {
         _localizer = new ResourceLocalizer(CultureInfo.GetCultureInfo(value == "ja" ? "ja" : "en"));
+        foreach (var option in SearchFieldOptions)
+        {
+            option.Label = _localizer[$"SearchField{option.Field}"];
+        }
+        OnPropertyChanged(nameof(SearchFieldLabel));
+        OnPropertyChanged(nameof(SearchMediaLabel));
         OnPropertyChanged(nameof(SettingsTitle));
         OnPropertyChanged(nameof(ErrorTitle));
+        OnPropertyChanged(nameof(EditXnfoLabel));
+        OnPropertyChanged(nameof(CoverArtUnavailableLabel));
         OnPropertyChanged(nameof(LanguageLabel));
         OnPropertyChanged(nameof(ThemeLabel));
         OnPropertyChanged(nameof(ThemeOptions));
@@ -94,6 +108,14 @@ public partial class SettingsViewModel : ObservableObject
     public string SettingsTitle => _localizer["SettingsTitle"];
 
     public string ErrorTitle => _localizer["ErrorTitle"];
+
+    public string SearchFieldLabel => _localizer["SearchFieldLabel"];
+
+    public string SearchMediaLabel => _localizer["SearchMediaLabel"];
+
+    public string EditXnfoLabel => _localizer["EditXnfo"];
+
+    public string CoverArtUnavailableLabel => _localizer["CoverUnavailable"];
 
     public string LanguageLabel => _localizer["LanguageLabel"];
 

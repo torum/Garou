@@ -151,6 +151,12 @@
   <data name="ClearFolderThumbnailCache" xml:space="preserve">
 	<value>Clear folder thumbnail cache</value>
   </data>
+  <data name="RescanLibrary" xml:space="preserve"><value>Rescan library</value></data>
+  <data name="RescanLibraryConfirmation" xml:space="preserve"><value>Rescan {0}? Missing files are removed from the index. Files moved while Garou was closed or whose move was not detected may be treated as new files, and their previous tag assignments may be lost. Source files will not be deleted.</value></data>
+  <data name="RescanLibraryInProgress" xml:space="preserve"><value>Rescanning {0}...</value></data>
+  <data name="RescanLibrarySuccess" xml:space="preserve"><value>Rescanned {0}.</value></data>
+  <data name="RescanLibraryError" xml:space="preserve"><value>Could not rescan {0}: {1}</value></data>
+  <data name="RescanLibraryLookupError" xml:space="preserve"><value>Could not check library: {0}</value></data>
 	<data name="RemoveFolderFromLibrary" xml:space="preserve">
 	<value>Remove folder from library</value>
   </data>
@@ -251,4 +257,54 @@
   <data name="SlideshowResume" xml:space="preserve"><value>Resume</value></data>
   <data name="SlideshowLoading" xml:space="preserve"><value>Loading...</value></data>
   <data name="SlideshowLoadError" xml:space="preserve"><value>Could not display {0}: {1}</value></data>
+  <data name="CoverUnavailable" xml:space="preserve"><value>Cover image unavailable</value></data>
+  <data name="SearchFieldLabel" xml:space="preserve"><value>Search field</value></data>
+  <data name="SearchMediaLabel" xml:space="preserve"><value>Search media</value></data>
+  <data name="SearchFieldAll" xml:space="preserve"><value>All</value></data>
+  <data name="SearchFieldFileName" xml:space="preserve"><value>File name</value></data>
+  <data name="SearchFieldTitle" xml:space="preserve"><value>Title</value></data>
+  <data name="SearchFieldSubtitle" xml:space="preserve"><value>Subtitle</value></data>
+  <data name="SearchFieldSortTitle" xml:space="preserve"><value>Sort title</value></data>
+  <data name="SearchFieldPublisher" xml:space="preserve"><value>Publisher</value></data>
+  <data name="SearchFieldStudioLabel" xml:space="preserve"><value>Studio / label</value></data>
+  <data name="SearchFieldReleaseDate" xml:space="preserve"><value>Release date</value></data>
+  <data name="SearchFieldPerformers" xml:space="preserve"><value>Performers</value></data>
+  <data name="SearchFieldCountries" xml:space="preserve"><value>Countries</value></data>
+  <data name="SearchFieldTags" xml:space="preserve"><value>Tags</value></data>
+  <data name="SearchFieldGenres" xml:space="preserve"><value>Genres</value></data>
+  <data name="SearchFieldCategories" xml:space="preserve"><value>Categories</value></data>
+  <data name="SearchFieldContentRating" xml:space="preserve"><value>Content rating</value></data>
+  <data name="SearchFieldDescription" xml:space="preserve"><value>Description</value></data>
+  <data name="SearchFieldComments" xml:space="preserve"><value>Comments</value></data>
+  <data name="SearchFieldCoverArt" xml:space="preserve"><value>Cover image path</value></data>
+  <data name="EditXnfo" xml:space="preserve"><value>Edit metadata</value></data>
+  <data name="XnfoEditError" xml:space="preserve"><value>Could not edit metadata: {0}</value></data>
+  <data name="XnfoEditorTitle" xml:space="preserve"><value>Edit XNFO metadata</value></data>
+  <data name="XnfoTitle" xml:space="preserve"><value>Title</value></data>
+  <data name="XnfoSubtitle" xml:space="preserve"><value>Subtitle</value></data>
+  <data name="XnfoSortTitle" xml:space="preserve"><value>Sort title</value></data>
+  <data name="XnfoPublisher" xml:space="preserve"><value>Publisher</value></data>
+  <data name="XnfoStudioLabel" xml:space="preserve"><value>Studio / label</value></data>
+  <data name="XnfoReleaseDate" xml:space="preserve"><value>Release date (YYYY, YYYY-MM or YYYY-MM-DD)</value></data>
+  <data name="XnfoContentRating" xml:space="preserve"><value>Content rating</value></data>
+  <data name="XnfoDescription" xml:space="preserve"><value>Description</value></data>
+  <data name="XnfoComments" xml:space="preserve"><value>Comments</value></data>
+  <data name="XnfoCoverPath" xml:space="preserve"><value>Cover image path (relative to media file or absolute)</value></data>
+  <data name="XnfoPerformers" xml:space="preserve"><value>Performers (one per line)</value></data>
+  <data name="XnfoCountries" xml:space="preserve"><value>Countries (select ISO alpha-2 codes)</value></data>
+  <data name="XnfoCountrySearch" xml:space="preserve"><value>Search countries by name or code</value></data>
+  <data name="XnfoCountriesSelected" xml:space="preserve"><value>{0} selected</value></data>
+  <data name="XnfoCountryInvalidEntry" xml:space="preserve"><value>Invalid country code; uncheck to remove</value></data>
+  <data name="XnfoInvalidCountries" xml:space="preserve"><value>Remove invalid country entries before confirming.</value></data>
+  <data name="XnfoTags" xml:space="preserve"><value>Tags (one per line)</value></data>
+  <data name="XnfoGenres" xml:space="preserve"><value>Genres (one per line)</value></data>
+  <data name="XnfoCategories" xml:space="preserve"><value>Categories (one per line)</value></data>
+  <data name="XnfoConfirm" xml:space="preserve"><value>OK</value></data>
+  <data name="XnfoBrowse" xml:space="preserve"><value>Browse…</value></data>
+  <data name="XnfoChooseCover" xml:space="preserve"><value>Choose a cover image</value></data>
+  <data name="XnfoImages" xml:space="preserve"><value>Images</value></data>
+  <data name="XnfoCoverLocalRequired" xml:space="preserve"><value>Please choose a local image file.</value></data>
+  <data name="XnfoCoverBrowseError" xml:space="preserve"><value>Could not browse for the cover image. Check the media and cover paths.</value></data>
+  <data name="XnfoInvalidReleaseDate" xml:space="preserve"><value>Enter a valid release date as YYYY, YYYY-MM or YYYY-MM-DD, or leave it empty.</value></data>
+  <data name="XnfoInvalidCoverPath" xml:space="preserve"><value>The cover image path or media path is invalid.</value></data>
 </root>

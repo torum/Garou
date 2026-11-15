@@ -8,7 +8,10 @@ using Garou.Application.Queries;
 using Garou.Domain.Entities;
 using Garou.Domain.Models;
 using Garou.Domain.Abstractions;
+using Garou.Infrastructure.Metadata;
 using Garou.Infrastructure.Settings;
+using Avalonia.Threading;
+using Garou.Localization;
 using Garou.UI.Models;
 
 namespace Garou.ViewModels;
@@ -22,7 +25,8 @@ public partial class MainViewModel(
     IThumbnailGeneratorService thumbnailGenerator,
     IMediaFileRepository mediaFiles,
     IFolderRepository folders,
-    IMetadataExtractionService metadataExtraction) : ObservableObject, IDisposable
+    IMetadataExtractionService metadataExtraction,
+    XnfoIndexService xnfoIndex) : ObservableObject, IDisposable
 {
     private const int SearchDebounceMilliseconds = 300;
     private const int ThumbnailRegenerationDelayMilliseconds = 300;
@@ -50,11 +54,18 @@ public partial class MainViewModel(
     private readonly object _thumbnailRegenerationLock = new();
     private long _visibleThumbnailVersion;
     private bool _thumbnailRegenerationWorkerRunning;
+    private bool _xnfoSubscribed;
 
     public ObservableCollection<MediaItemViewModel> Items => _items;
 
     public void Dispose()
     {
+        if (_xnfoSubscribed)
+        {
+            xnfoIndex.IndexingError -= OnXnfoIndexingError;
+            xnfoIndex.MetadataChanged -= OnXnfoMetadataChanged;
+            _xnfoSubscribed = false;
+        }
         _selectedMetadataCts?.Cancel();
         _selectedMetadataCts?.Dispose();
 
@@ -321,6 +332,9 @@ public partial class MainViewModel(
     public partial string? SearchText { get; set; }
 
     [ObservableProperty]
+    public partial SearchFieldOption SelectedSearchField { get; set; } = settings.SearchFieldOptions[0];
+
+    [ObservableProperty]
     public partial FolderNode? SelectedFolder { get; set; }
 
     public IReadOnlyList<FolderBreadcrumb> SelectedFolderBreadcrumbs { get; private set; } = [];
@@ -348,6 +362,22 @@ public partial class MainViewModel(
 
         breadcrumbs.Reverse();
         return breadcrumbs;
+    }
+
+    public Task<XnfoMetadata?> LoadXnfoAsync(string path, CancellationToken cancellationToken) =>
+        xnfoIndex.LoadAsync(path, cancellationToken);
+
+    public async Task SaveXnfoAsync(string path, XnfoMetadata metadata, CancellationToken cancellationToken)
+    {
+        using (await operationGate.EnterAsync(cancellationToken))
+        {
+            if (!File.Exists(path) || await mediaFiles.GetByPathAsync(path, cancellationToken) is null)
+            {
+                throw new FileNotFoundException("The media file is no longer available or indexed.", path);
+            }
+            await xnfoIndex.SaveAsync(path, metadata, cancellationToken);
+        }
+        await ReloadAsync(_selectedFolderId, cancellationToken);
     }
 
     public async Task LoadSelectedMetadataAsync()
@@ -590,6 +620,14 @@ public partial class MainViewModel(
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
+        if (!_xnfoSubscribed)
+        {
+            xnfoIndex.IndexingError += OnXnfoIndexingError;
+            xnfoIndex.MetadataChanged += OnXnfoMetadataChanged;
+            _xnfoSubscribed = true;
+            if (xnfoIndex.LastError is { } error)
+                ReportError(error);
+        }
         Log("Initialize started");
         _isInitializing = true;
         var appSettings = settingsSession.Current;
@@ -1074,6 +1112,49 @@ public partial class MainViewModel(
         }
     }
 
+    public Task<bool> IsLibraryRootAsync(string path, CancellationToken cancellationToken) =>
+        libraryCommands.IsLibraryRootAsync(path, cancellationToken);
+
+    public async Task RescanLibraryAsync(string path, CancellationToken cancellationToken)
+    {
+        if (IsScanning)
+        {
+            return;
+        }
+
+        var localizer = new ResourceLocalizer(CultureInfo.GetCultureInfo(settingsSession.Current.Language == "ja" ? "ja" : "en"));
+        try
+        {
+            StatusText = string.Format(localizer["RescanLibraryInProgress"], path);
+            var progress = new Progress<ScanProgress>(ReportScanProgress);
+            await RunScanAsync(() => libraryCommands.RescanLibraryByRootAsync(path, progress, cancellationToken));
+            var selectedId = _selectedFolderId;
+            await LoadFolderTreeAsync(cancellationToken);
+            var selectedNode = selectedId is { } id ? FindFolderNode(FolderTree, id) : null;
+            _suppressSelectedFolderReload = true;
+            try
+            {
+                SelectedFolder = selectedNode;
+            }
+            finally
+            {
+                _suppressSelectedFolderReload = false;
+            }
+            FolderRestored?.Invoke(selectedNode);
+            await ReloadAsync(_selectedFolderId, cancellationToken);
+            StatusText = string.Format(localizer["RescanLibrarySuccess"], path);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            StatusText = string.Format(localizer["RescanLibraryError"], path, exception.Message);
+            ReportError(StatusText);
+        }
+    }
+
     public async Task AddFolderAsync(string path, CancellationToken cancellationToken)
     {
         Guid id;
@@ -1152,6 +1233,14 @@ public partial class MainViewModel(
         ScheduleReload(SearchDebounceMilliseconds);
     }
 
+    partial void OnSelectedSearchFieldChanged(SearchFieldOption value)
+    {
+        if (!_isInitializing && !string.IsNullOrWhiteSpace(SearchText))
+        {
+            ScheduleReload(0);
+        }
+    }
+
     partial void OnSelectedFolderChanged(FolderNode? value)
     {
         _selectedFolderId = value?.Folder.Id;
@@ -1164,6 +1253,10 @@ public partial class MainViewModel(
             ScheduleReload(0);
         }
     }
+
+    private void OnXnfoIndexingError(string message) => Dispatcher.UIThread.Post(() => ReportError(message));
+
+    private void OnXnfoMetadataChanged() => Dispatcher.UIThread.Post(() => ScheduleReload(SearchDebounceMilliseconds));
 
     private void ScheduleReload(int delayMilliseconds)
     {
@@ -1229,6 +1322,7 @@ public partial class MainViewModel(
         {
             cancellationToken.ThrowIfCancellationRequested();
             Log($"Reload started: folderId={folderId?.ToString() ?? "none"} search='{SearchText}'");
+            var selectedMediaId = SelectedItem?.File.Id;
             foreach (var item in Items)
             {
                 item.Dispose();
@@ -1247,6 +1341,10 @@ public partial class MainViewModel(
                 .Select(file => new MediaItemViewModel(file))
                 .ToArray(), cancellationToken);
             _items.ReplaceAll(items);
+            if (selectedMediaId is { } mediaId)
+            {
+                SelectedItem = items.FirstOrDefault(item => item.File.Id == mediaId);
+            }
 
             var folderCount = CountFolders(folderId);
             StatusText = $"{Items.Count} files, {folderCount} folders";
@@ -1284,5 +1382,6 @@ public partial class MainViewModel(
         Descending: false,
         AfterId: Guid.Empty,
         PageSize: 0,
-        IncludeDescendants: IncludeDescendants);
+        IncludeDescendants: IncludeDescendants,
+        SearchField: SelectedSearchField.Field);
 }

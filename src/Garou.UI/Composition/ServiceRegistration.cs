@@ -2,6 +2,7 @@ using Garou.Application.Events;
 using Garou.Application.Libraries;
 using Garou.Application.Queries;
 using Garou.Domain.Abstractions;
+using Garou.Infrastructure;
 using Garou.Infrastructure.Metadata;
 using Garou.Infrastructure.Persistence;
 using Garou.Infrastructure.Persistence.Repositories;
@@ -11,6 +12,7 @@ using Garou.Infrastructure.Thumbnails;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Data.Sqlite;
 
 namespace Garou.Composition;
 
@@ -31,19 +33,17 @@ public static class ServiceRegistration
 
     public static ServiceProvider Build()
     {
-        var appDataDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Garou");
-        var thumbnailDirectory = Path.Combine(appDataDirectory, "Thumbnails");
-        var databasePath = Path.Combine(appDataDirectory, "library.db");
-        var settingsPath = Path.Combine(appDataDirectory, "settings.xml");
+        var thumbnailDirectory = AppStoragePaths.ThumbnailDirectory;
+        var databasePath = AppStoragePaths.DatabaseFilePath;
+        var settingsPath = SettingsStore.DefaultSettingsFilePath;
 
+        Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
         Directory.CreateDirectory(thumbnailDirectory);
 
         var services = new ServiceCollection();
 
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton(new SqliteConnectionFactory($"Data Source={databasePath}"));
+        services.AddSingleton(new SqliteConnectionFactory(new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString()));
         services.AddSingleton<DatabaseInitializer>();
         services.AddSingleton<DatabaseMaintenanceService>();
         services.AddSingleton<BatchWriter>();
@@ -67,6 +67,8 @@ public static class ServiceRegistration
         services.AddSingleton<Garou.ViewModels.SettingsViewModel>();
 
         services.AddSingleton<IFileWatcherService, FileWatcherService>();
+        services.AddSingleton<XnfoStore>();
+        services.AddSingleton<XnfoIndexService>();
         services.AddSingleton<IMediaMetadataProvider, ImageMetadataProvider>();
         services.AddSingleton<IMediaMetadataProvider>(_ => new VideoMetadataProvider(ResolveExecutable(FfprobeExecutable)));
         services.AddSingleton<IMetadataExtractionService, MetadataExtractionService>();

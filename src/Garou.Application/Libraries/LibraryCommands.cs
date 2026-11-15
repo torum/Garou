@@ -139,14 +139,28 @@ public sealed class LibraryCommands(
         await scanner.ScanAsync(library, progress, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<bool> IsLibraryRootAsync(string rootPath, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var all = await libraries.GetAllAsync(cancellationToken).ConfigureAwait(false);
+        return all.Any(item => string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(item.RootPath)), fullPath, comparison));
+    }
+
     public async Task RescanLibraryByRootAsync(string rootPath, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
-        var fullPath = Path.GetFullPath(rootPath);
+        var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var all = await libraries.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        var library = all.FirstOrDefault(item => string.Equals(item.RootPath, fullPath, StringComparison.OrdinalIgnoreCase))
+        var library = all.FirstOrDefault(item => string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(item.RootPath)), fullPath, comparison))
             ?? throw new InvalidOperationException($"No library exists for root '{fullPath}'.");
         await scanner.ScanAsync(library, progress, cancellationToken).ConfigureAwait(false);
+        if (!library.IsOnline)
+        {
+            throw new DirectoryNotFoundException($"Library '{library.RootPath}' is not accessible.");
+        }
     }
 
     public async Task ReindexLibraryAsync(Guid id, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)

@@ -4,6 +4,7 @@ using Garou.Domain.Abstractions;
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
 using Garou.Domain.Models;
+using Garou.Infrastructure.Metadata;
 using Garou.Infrastructure.Settings;
 
 namespace Garou.Infrastructure.Sync;
@@ -16,7 +17,8 @@ public sealed class MediaIndexerService(
     ILibraryExcludedFolderRepository excludedFolders,
     LibraryOperationGate operationGate,
     AppSettingsSession settingsSession,
-    TimeProvider timeProvider) : ILibraryScanner
+    TimeProvider timeProvider,
+    XnfoIndexService? xnfoIndex = null) : ILibraryScanner
 {
     private const int BatchSize = 200;
     private static readonly TimeSpan OfflineRetryInterval = TimeSpan.FromSeconds(30);
@@ -185,6 +187,14 @@ public sealed class MediaIndexerService(
             throw;
         }
 
+        if (xnfoIndex is not null)
+        {
+            foreach (var path in files)
+            {
+                await xnfoIndex.SyncObservedAsync(path, notifyChange: false, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         var seen = files.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var stale = known.Keys.Where(path => !seen.Contains(path));
 
@@ -214,18 +224,119 @@ public sealed class MediaIndexerService(
             return;
         }
 
+        if (xnfoIndex is not null)
+        {
+            var isSidecar = change.FullPath.EndsWith(".xnfo", StringComparison.OrdinalIgnoreCase);
+            var oldSidecarPath = change.Kind == FileChangeKind.Renamed ? change.OldFullPath : null;
+            var wasSidecar = oldSidecarPath?.EndsWith(".xnfo", StringComparison.OrdinalIgnoreCase) == true;
+            if (isSidecar || wasSidecar)
+            {
+                if (isSidecar)
+                    await SyncSidecarAsync(change.FullPath, cancellationToken).ConfigureAwait(false);
+                if (wasSidecar)
+                    await SyncSidecarAsync(oldSidecarPath!, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+        }
+
         switch (change.Kind)
         {
             case FileChangeKind.Deleted:
-                await mediaFiles.DeleteByPathAsync(change.FullPath, cancellationToken).ConfigureAwait(false);
+                if (await folders.GetByPathAsync(change.FullPath, cancellationToken).ConfigureAwait(false) is not null)
+                {
+                    await ScanCoreAsync(library, null, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
+                    await RemoveMissingFolderAsync(change.FullPath, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await mediaFiles.DeleteByPathAsync(change.FullPath, cancellationToken).ConfigureAwait(false);
+                }
                 break;
             case FileChangeKind.Renamed:
-                await mediaFiles.DeleteByPathAsync(change.OldFullPath!, cancellationToken).ConfigureAwait(false);
-                await IndexFileAsync(library.Id, library.RootPath, change.FullPath, cancellationToken).ConfigureAwait(false);
+                ArgumentException.ThrowIfNullOrWhiteSpace(change.OldFullPath);
+                if (Directory.Exists(change.FullPath))
+                {
+                    var paths = await mediaFiles.GetPathsUnderRootAsync(change.OldFullPath, cancellationToken).ConfigureAwait(false);
+                    foreach (var oldPath in paths)
+                    {
+                        var newPath = Path.Combine(change.FullPath, Path.GetRelativePath(change.OldFullPath, oldPath));
+                        await MoveFileAsync(library, oldPath, newPath, cancellationToken).ConfigureAwait(false);
+                    }
+                    await ScanCoreAsync(library, null, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
+                    await RemoveMissingFolderAsync(change.OldFullPath, cancellationToken).ConfigureAwait(false);
+                }
+                else if (File.Exists(change.FullPath))
+                {
+                    await MoveFileAsync(library, change.OldFullPath, change.FullPath, cancellationToken).ConfigureAwait(false);
+                }
                 break;
             default:
-                await IndexFileAsync(library.Id, library.RootPath, change.FullPath, cancellationToken).ConfigureAwait(false);
+                if (Directory.Exists(change.FullPath))
+                {
+                    await ScanCoreAsync(library, null, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await IndexFileAsync(library.Id, library.RootPath, change.FullPath, cancellationToken).ConfigureAwait(false);
+                }
                 break;
+        }
+    }
+
+    private async Task SyncSidecarAsync(string sidecarPath, CancellationToken cancellationToken)
+    {
+        var mediaPath = sidecarPath[..^5];
+        if (xnfoIndex is not null && await mediaFiles.GetByPathAsync(mediaPath, cancellationToken).ConfigureAwait(false) is not null)
+        {
+            await xnfoIndex.SyncObservedAsync(mediaPath, notifyChange: true, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RemoveMissingFolderAsync(string path, CancellationToken cancellationToken)
+    {
+        if (Directory.Exists(path) || (await mediaFiles.GetPathsUnderRootAsync(path, cancellationToken).ConfigureAwait(false)).Count != 0)
+        {
+            return;
+        }
+
+        var registeredLibraries = await libraries.GetAllAsync(cancellationToken).ConfigureAwait(false);
+        if (registeredLibraries.Any(library => IsSameOrDescendant(path, library.RootPath)))
+        {
+            return;
+        }
+
+        var folder = await folders.GetByPathAsync(path, cancellationToken).ConfigureAwait(false);
+        if (folder is not null)
+        {
+            await folders.DeleteSubtreeAsync(folder.Id, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task MoveFileAsync(LibraryDefinition library, string oldPath, string newPath, CancellationToken cancellationToken)
+    {
+        var excludedPaths = await excludedFolders.GetPathsAsync(library.Id, cancellationToken).ConfigureAwait(false);
+        if (operationGate.IsPathSuppressed(newPath) || IsExcluded(newPath, excludedPaths)
+            || !IsSameOrDescendant(library.RootPath, newPath)
+            || !IsWithinScanScope(library.RootPath, newPath) || !IsSupported(Path.GetExtension(newPath)))
+        {
+            await mediaFiles.DeleteByPathAsync(oldPath, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(newPath)
+            ?? throw new InvalidOperationException("The moved media file has no parent directory.");
+        var folderId = await EnsureFolderAsync(directory, library.RootPath, new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(false);
+        var file = await BuildMediaFileAsync(newPath, folderId, cancellationToken).ConfigureAwait(false);
+        if (file is not null)
+        {
+            if (!await mediaFiles.MoveAsync(oldPath, file, cancellationToken).ConfigureAwait(false))
+            {
+                await mediaFiles.UpsertBatchAsync([file], cancellationToken).ConfigureAwait(false);
+            }
+            if (xnfoIndex is not null)
+            {
+                await xnfoIndex.SyncObservedAsync(newPath, notifyChange: true, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
@@ -285,6 +396,10 @@ public sealed class MediaIndexerService(
         }
 
         await mediaFiles.UpsertBatchAsync([mediaFile], cancellationToken).ConfigureAwait(false);
+        if (xnfoIndex is not null)
+        {
+            await xnfoIndex.SyncObservedAsync(path, notifyChange: true, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static bool IsExcluded(string path, IReadOnlyList<string> excludedPaths) =>
@@ -294,7 +409,7 @@ public sealed class MediaIndexerService(
     {
         var fullParentPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(parentPath));
         var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        if (string.Equals(fullParentPath, fullPath, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(fullParentPath, fullPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
         {
             return true;
         }

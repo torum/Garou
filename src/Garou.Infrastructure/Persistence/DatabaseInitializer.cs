@@ -35,6 +35,19 @@ public sealed class DatabaseInitializer(SqliteConnectionFactory connectionFactor
         CREATE INDEX IF NOT EXISTS IX_MediaFile_ModifiedDateUtc ON MediaFile(ModifiedDateUtc);
         CREATE INDEX IF NOT EXISTS IX_MediaFile_FileSize ON MediaFile(FileSize);
 
+        CREATE TABLE IF NOT EXISTS XnfoMetadata
+        (
+            MediaFileId TEXT PRIMARY KEY REFERENCES MediaFile(Id) ON DELETE CASCADE,
+            Title TEXT NOT NULL, Subtitle TEXT NOT NULL, SortTitle TEXT NOT NULL,
+            Publisher TEXT NOT NULL, StudioLabel TEXT NOT NULL, ReleaseDate TEXT NOT NULL,
+            Performers TEXT NOT NULL, Countries TEXT NOT NULL, Tags TEXT NOT NULL,
+            Genres TEXT NOT NULL, Categories TEXT NOT NULL, ContentRating TEXT NOT NULL,
+            Description TEXT NOT NULL, Comments TEXT NOT NULL, CoverArt TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS IX_XnfoMetadata_Title ON XnfoMetadata(Title);
+        CREATE INDEX IF NOT EXISTS IX_XnfoMetadata_SortTitle ON XnfoMetadata(SortTitle);
+        CREATE INDEX IF NOT EXISTS IX_XnfoMetadata_ReleaseDate ON XnfoMetadata(ReleaseDate);
+
         CREATE TABLE IF NOT EXISTS Tag
         (
             Id TEXT NOT NULL PRIMARY KEY,

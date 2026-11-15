@@ -8,8 +8,7 @@ public sealed class SettingsStore(string settingsFilePath)
 {
     private readonly SemaphoreSlim _fileAccess = new(1, 1);
 
-    public static string DefaultSettingsFilePath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MediaOrganizer", "settings.xml");
+    public static string DefaultSettingsFilePath => AppStoragePaths.SettingsFilePath;
 
     private static readonly string[] SupportedLanguages = ["en", "ja"];
 

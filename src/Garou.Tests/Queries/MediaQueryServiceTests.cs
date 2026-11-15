@@ -152,6 +152,8 @@ public sealed class MediaQueryServiceTests
 
         public Task UpsertBatchAsync(IReadOnlyList<MediaFile> mediaFiles, CancellationToken cancellationToken) => Task.CompletedTask;
 
+        public Task<bool> MoveAsync(string oldPath, MediaFile updatedFile, CancellationToken cancellationToken) => Task.FromResult(false);
+
         public Task UpdateThumbnailPathAsync(Guid mediaFileId, string? thumbnailPath, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task DeleteByPathAsync(string path, CancellationToken cancellationToken) => Task.CompletedTask;

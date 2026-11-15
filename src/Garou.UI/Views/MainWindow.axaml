@@ -76,6 +76,7 @@
                             <Grid.ContextFlyout>
                                 <MenuFlyout Opened="OnMenuFlyoutOpened">
                                     <MenuItem Header="Open folder" Tag="OpenFolder" Click="OnOpenFolderLocationClick" />
+                                    <MenuItem Header="Rescan library" Tag="RescanLibrary" IsVisible="False" Click="OnRescanLibraryClick" />
                                     <MenuItem Header="Clear folder thumbnail cache" Tag="ClearFolderThumbnailCache" Click="OnClearFolderThumbnailCacheClick" />
                                     <MenuItem Header="Remove folder from library" Tag="RemoveFolderFromLibrary" Click="OnRemoveFolderClick" />
                                 </MenuFlyout>

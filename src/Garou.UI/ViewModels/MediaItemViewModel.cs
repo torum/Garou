@@ -28,11 +28,17 @@ public sealed class MediaItemViewModel : ObservableObject, IDisposable
     {
         get
         {
-            if (_thumbnail is null && !_isDisposed && File.ThumbnailPath is { } thumbnailPath && System.IO.File.Exists(thumbnailPath))
+            if (_thumbnail is null && !_isDisposed)
             {
-                _thumbnail = new ThumbnailImage(thumbnailPath);
-                _thumbnail.PropertyChanged += OnThumbnailPropertyChanged;
-                SetThumbnailState(_thumbnail.State);
+                var coverPath = ResolveCoverPath();
+                var thumbnailPath = File.ThumbnailPath;
+                var imagePath = coverPath is not null && System.IO.File.Exists(coverPath) ? coverPath : thumbnailPath;
+                if (imagePath is not null && System.IO.File.Exists(imagePath))
+                {
+                    _thumbnail = new ThumbnailImage(imagePath, imagePath == coverPath ? thumbnailPath : null);
+                    _thumbnail.PropertyChanged += OnThumbnailPropertyChanged;
+                    SetThumbnailState(_thumbnail.State);
+                }
             }
 
             return _thumbnail;
@@ -49,7 +55,8 @@ public sealed class MediaItemViewModel : ObservableObject, IDisposable
 
     internal void SetThumbnailState(ThumbnailLoadState state)
     {
-        if (_isDisposed || !SetProperty(ref _thumbnailState, state, nameof(ThumbnailState)))
+        if (_isDisposed || (state != ThumbnailLoadState.Loaded && _thumbnail?.State == ThumbnailLoadState.Loaded)
+            || !SetProperty(ref _thumbnailState, state, nameof(ThumbnailState)))
         {
             return;
         }
@@ -64,6 +71,37 @@ public sealed class MediaItemViewModel : ObservableObject, IDisposable
         if (eventArgs.PropertyName == nameof(ThumbnailImage.State) && sender is ThumbnailImage thumbnail)
         {
             SetThumbnailState(thumbnail.State);
+            OnPropertyChanged(nameof(IsCoverArtUnavailable));
+        }
+        if (eventArgs.PropertyName == nameof(ThumbnailImage.PrimaryFailed))
+        {
+            OnPropertyChanged(nameof(IsCoverArtUnavailable));
+        }
+    }
+
+    public bool IsCoverArtUnavailable
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(File.CoverArt))
+                return false;
+            var coverPath = ResolveCoverPath();
+            return coverPath is null || !System.IO.File.Exists(coverPath) || _thumbnail?.PrimaryFailed == true
+                || (_thumbnail?.State == ThumbnailLoadState.Failed && File.ThumbnailPath != coverPath);
+        }
+    }
+
+    private string? ResolveCoverPath()
+    {
+        if (string.IsNullOrWhiteSpace(File.CoverArt))
+            return null;
+        try
+        {
+            return Path.GetFullPath(File.CoverArt, Path.GetDirectoryName(Path.GetFullPath(File.Path))!);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
         }
     }
 

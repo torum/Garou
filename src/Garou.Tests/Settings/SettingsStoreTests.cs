@@ -1,7 +1,9 @@
 using System.Globalization;
+using Garou.Application.Queries;
 using Garou.Domain.Models;
 using Garou.Infrastructure.Settings;
 using Garou.Localization;
+using Garou.ViewModels;
 
 namespace Garou.Tests.Settings;
 
@@ -353,6 +355,25 @@ public sealed class SettingsStoreTests : IDisposable
         var localizer = new ResourceLocalizer(new CultureInfo("en"));
 
         Assert.Equal("Settings", localizer["SettingsTitle"]);
+    }
+
+    [Fact]
+    public void SearchFieldLabelsUpdateWithoutReplacingOptionsWhenLanguageChanges()
+    {
+        var settings = new SettingsViewModel(new AppSettingsSession());
+        var options = settings.SearchFieldOptions.ToArray();
+        Assert.Equal(Enum.GetValues<MediaSearchField>(), options.Select(option => option.Field));
+        Assert.Equal("All", options[0].Label);
+        Assert.All(options, option => Assert.NotEqual($"SearchField{option.Field}", option.Label));
+        var changes = 0;
+        options[0].PropertyChanged += (_, args) => { if (args.PropertyName == nameof(SearchFieldOption.Label)) changes++; };
+
+        settings.SelectedLanguage = "ja";
+
+        Assert.Same(options[0], settings.SearchFieldOptions[0]);
+        Assert.Equal("すべて", options[0].Label);
+        Assert.Equal(1, changes);
+        Assert.All(options, option => Assert.NotEqual($"SearchField{option.Field}", option.Label));
     }
 
     [Fact]

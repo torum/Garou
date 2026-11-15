@@ -55,6 +55,16 @@ public sealed class MediaQueryBuilderTests
     }
 
     [Fact]
+    public void WhenSpecificFieldSearchContainsWildcardsThenTheyAreEscaped()
+    {
+        var built = MediaQueryBuilder.Build(CreateQuery() with { SearchText = "50%_off", SearchField = MediaSearchField.Tags });
+
+        Assert.Contains("json_each(x.Tags)", built.Sql);
+        Assert.DoesNotContain("json_each(x.Genres)", built.Sql);
+        Assert.Equal("%50\\%\\_off%", built.Parameters["$search"]);
+    }
+
+    [Fact]
     public void WhenSearchTextIsInjectionAttemptThenItIsOnlyAParameter()
     {
         var built = MediaQueryBuilder.Build(CreateQuery() with { SearchText = "'; DROP TABLE MediaFile; --" });

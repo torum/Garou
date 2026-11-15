@@ -12,7 +12,8 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
     private const string SelectColumns =
         """
         Id, Path, FileName, Extension, MediaType, FileSize, HashValue, ThumbnailPath,
-        CreatedDateUtc, ModifiedDateUtc, LastIndexedUtc, FolderId
+        CreatedDateUtc, ModifiedDateUtc, LastIndexedUtc, FolderId,
+        (SELECT CoverArt FROM XnfoMetadata WHERE MediaFileId = MediaFile.Id) AS CoverArt
         """;
 
     public async Task<MediaFile?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
@@ -134,6 +135,30 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
         await transaction.CommitAsync(cancellationToken);
     }
 
+    public async Task<bool> MoveAsync(string oldPath, MediaFile updatedFile, CancellationToken cancellationToken)
+    {
+        var updated = await connectionFactory.ExecuteNonQueryAsync(
+            """
+            UPDATE MediaFile SET Path = $path, FileName = $fileName, Extension = $extension,
+                MediaType = $mediaType, FileSize = $fileSize, ThumbnailPath = NULL,
+                CreatedDateUtc = $createdDateUtc, ModifiedDateUtc = $modifiedDateUtc,
+                LastIndexedUtc = $lastIndexedUtc, FolderId = $folderId
+            WHERE Path = $oldPath;
+            """,
+            cancellationToken,
+            ("$path", updatedFile.Path),
+            ("$fileName", updatedFile.FileName),
+            ("$extension", updatedFile.Extension),
+            ("$mediaType", (int)updatedFile.MediaType),
+            ("$fileSize", updatedFile.FileSize),
+            ("$createdDateUtc", updatedFile.CreatedDateUtc.ToDbDate()),
+            ("$modifiedDateUtc", updatedFile.ModifiedDateUtc.ToDbDate()),
+            ("$lastIndexedUtc", updatedFile.LastIndexedUtc.ToDbDate()),
+            ("$folderId", updatedFile.FolderId?.ToString("N")),
+            ("$oldPath", oldPath));
+        return updated > 0;
+    }
+
     public async Task UpdateThumbnailPathAsync(Guid mediaFileId, string? thumbnailPath, CancellationToken cancellationToken) =>
         await connectionFactory.ExecuteNonQueryAsync(
             "UPDATE MediaFile SET ThumbnailPath = $thumbnailPath WHERE Id = $id;",
@@ -141,8 +166,19 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
             ("$thumbnailPath", thumbnailPath),
             ("$id", mediaFileId.ToString("N")));
 
-    public async Task DeleteByPathAsync(string path, CancellationToken cancellationToken) =>
-        await connectionFactory.ExecuteNonQueryAsync("DELETE FROM MediaFile WHERE Path = $path;", cancellationToken, ("$path", path));
+    public async Task DeleteByPathAsync(string path, CancellationToken cancellationToken)
+    {
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken);
+        await using var transaction = connection.BeginTransaction();
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("$path", path);
+        command.CommandText = "DELETE FROM MediaFileTag WHERE MediaFileId IN (SELECT Id FROM MediaFile WHERE Path = $path);";
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        command.CommandText = "DELETE FROM MediaFile WHERE Path = $path;";
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
 
     public async Task<IReadOnlyList<string>> GetPathsUnderRootAsync(string rootPath, CancellationToken cancellationToken)
     {
@@ -192,7 +228,8 @@ public sealed class MediaFileRepository(SqliteConnectionFactory connectionFactor
             CreatedDateUtc = reader.ReadDate(8),
             ModifiedDateUtc = reader.ReadDate(9),
             LastIndexedUtc = reader.ReadDate(10),
-            FolderId = reader.IsDBNull(11) ? null : Guid.Parse(reader.GetString(11))
+            FolderId = reader.IsDBNull(11) ? null : Guid.Parse(reader.GetString(11)),
+            CoverArt = reader.ReadNullableString(12)
         };
     }
 }

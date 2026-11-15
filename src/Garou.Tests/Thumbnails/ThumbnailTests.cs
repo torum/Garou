@@ -20,12 +20,21 @@ public sealed class ThumbnailTests
             directory,
             TimeProvider.System);
 
-        var result = await generator.GenerateAsync(
-            new MediaFile { Path = "photo.jpg", FileName = "photo.jpg", Extension = ".jpg", MediaType = MediaType.Image },
-            CancellationToken.None);
+        try
+        {
+            var result = await generator.GenerateAsync(
+                new MediaFile { Path = "photo.jpg", FileName = "photo.jpg", Extension = ".jpg", MediaType = MediaType.Image },
+                CancellationToken.None);
 
-        Assert.Null(result);
-        Assert.Empty(repository.Upserted);
+            Assert.Null(result);
+            Assert.Empty(repository.Upserted);
+            Assert.True(Directory.Exists(Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFolderName("photo.jpg"))));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -60,14 +69,29 @@ public sealed class ThumbnailTests
     }
 
     [Fact]
+    public void WhenSourceFoldersDifferThenThumbnailFoldersDiffer()
+    {
+        var sourceFolder = Path.Combine(Path.GetTempPath(), "photos");
+        var otherFolder = Path.Combine(Path.GetTempPath(), "other", "photos");
+        var firstFolderHash = ThumbnailGeneratorService.ThumbnailFolderName(Path.Combine(sourceFolder, "first.jpg"));
+        var secondFolderHash = ThumbnailGeneratorService.ThumbnailFolderName(Path.Combine(sourceFolder, "second.jpg"));
+        var otherFolderHash = ThumbnailGeneratorService.ThumbnailFolderName(Path.Combine(otherFolder, "first.jpg"));
+
+        Assert.Equal(firstFolderHash, secondFolderHash);
+        Assert.NotEqual(firstFolderHash, otherFolderHash);
+        Assert.Matches("^[0-9a-f]{64}$", firstFolderHash);
+    }
+
+    [Fact]
     public async Task WhenRequestedSizeIsCachedThenExistingVariantIsReused()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var directory = Path.Combine(Path.GetTempPath(), $"Garou-thumbs-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(directory);
         var sourcePath = "photo.jpg";
-        var requestedPath = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 200));
-        var otherSizePath = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 320));
+        var sourceThumbnailDirectory = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFolderName(sourcePath));
+        Directory.CreateDirectory(sourceThumbnailDirectory);
+        var requestedPath = Path.Combine(sourceThumbnailDirectory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 200));
+        var otherSizePath = Path.Combine(sourceThumbnailDirectory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 320));
         await File.WriteAllBytesAsync(requestedPath, [1], cancellationToken);
         await File.WriteAllBytesAsync(otherSizePath, [1], cancellationToken);
         var repository = new FakeCacheRepository();
@@ -99,8 +123,9 @@ public sealed class ThumbnailTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var directory = Path.Combine(Path.GetTempPath(), $"Garou-thumbs-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(directory);
         var sourcePath = "photo.jpg";
+        var sourceThumbnailDirectory = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFolderName(sourcePath));
+        Directory.CreateDirectory(sourceThumbnailDirectory);
         var repository = new FakeCacheRepository();
         var mediaFile = new MediaFile
         {
@@ -108,16 +133,20 @@ public sealed class ThumbnailTests
             FileName = "photo.jpg",
             Extension = ".jpg",
             MediaType = MediaType.Image,
-            ThumbnailPath = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 280))
+            ThumbnailPath = Path.Combine(sourceThumbnailDirectory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 280))
         };
         var thumbnailPaths = new[]
         {
             mediaFile.ThumbnailPath,
-            Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 320))
+            Path.Combine(sourceThumbnailDirectory, ThumbnailGeneratorService.ThumbnailFileName(sourcePath, 320))
         };
-        var unrelatedThumbnailPath = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFileName("other.jpg", 320));
+        var unrelatedThumbnailPath = Path.Combine(sourceThumbnailDirectory, ThumbnailGeneratorService.ThumbnailFileName("other.jpg", 320));
+        var otherSourcePath = Path.Combine("other-folder", "photo.jpg");
+        var otherSourceThumbnailDirectory = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFolderName(otherSourcePath));
+        Directory.CreateDirectory(otherSourceThumbnailDirectory);
+        var otherFolderThumbnailPath = Path.Combine(otherSourceThumbnailDirectory, ThumbnailGeneratorService.ThumbnailFileName(otherSourcePath, 320));
 
-        foreach (var path in thumbnailPaths.Append(unrelatedThumbnailPath))
+        foreach (var path in thumbnailPaths.Append(unrelatedThumbnailPath).Append(otherFolderThumbnailPath))
         {
             await File.WriteAllBytesAsync(path!, [1], cancellationToken);
             repository.Add(new ThumbnailCacheEntry { ThumbnailPath = path!, SizeBytes = 1, LastAccessUtc = DateTime.UtcNow });
@@ -132,7 +161,9 @@ public sealed class ThumbnailTests
         await generator.ClearCacheAsync(mediaFile, cancellationToken);
 
         Assert.All(thumbnailPaths, path => Assert.False(File.Exists(path)));
-        Assert.Equal([unrelatedThumbnailPath], repository.Remaining());
+        Assert.Equal([unrelatedThumbnailPath, otherFolderThumbnailPath], repository.Remaining());
+        Assert.True(File.Exists(unrelatedThumbnailPath));
+        Assert.True(File.Exists(otherFolderThumbnailPath));
         Directory.Delete(directory, recursive: true);
     }
 

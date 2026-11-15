@@ -151,6 +151,12 @@
   <data name="ClearFolderThumbnailCache" xml:space="preserve">
 	<value>フォルダーのサムネイルキャッシュを削除</value>
   </data>
+  <data name="RescanLibrary" xml:space="preserve"><value>ライブラリを再スキャン</value></data>
+  <data name="RescanLibraryConfirmation" xml:space="preserve"><value>{0} を再スキャンしますか？存在しないファイルはインデックスから削除されます。Garou の終了中に移動したファイルや移動が検出されなかったファイルは新しいファイルとして扱われ、以前のタグの割り当てが失われる場合があります。元のファイルは削除されません。</value></data>
+  <data name="RescanLibraryInProgress" xml:space="preserve"><value>{0} を再スキャンしています...</value></data>
+  <data name="RescanLibrarySuccess" xml:space="preserve"><value>{0} の再スキャンが完了しました。</value></data>
+  <data name="RescanLibraryError" xml:space="preserve"><value>{0} を再スキャンできませんでした: {1}</value></data>
+  <data name="RescanLibraryLookupError" xml:space="preserve"><value>ライブラリを確認できませんでした: {0}</value></data>
 	<data name="RemoveFolderFromLibrary" xml:space="preserve">
 	<value>ライブラリからフォルダーを削除</value>
   </data>
@@ -251,4 +257,54 @@
   <data name="SlideshowResume" xml:space="preserve"><value>再開</value></data>
   <data name="SlideshowLoading" xml:space="preserve"><value>読み込み中...</value></data>
   <data name="SlideshowLoadError" xml:space="preserve"><value>{0}を表示できません: {1}</value></data>
+  <data name="CoverUnavailable" xml:space="preserve"><value>カバー画像を表示できません</value></data>
+  <data name="SearchFieldLabel" xml:space="preserve"><value>検索対象</value></data>
+  <data name="SearchMediaLabel" xml:space="preserve"><value>メディアを検索</value></data>
+  <data name="SearchFieldAll" xml:space="preserve"><value>すべて</value></data>
+  <data name="SearchFieldFileName" xml:space="preserve"><value>ファイル名</value></data>
+  <data name="SearchFieldTitle" xml:space="preserve"><value>タイトル</value></data>
+  <data name="SearchFieldSubtitle" xml:space="preserve"><value>サブタイトル</value></data>
+  <data name="SearchFieldSortTitle" xml:space="preserve"><value>並べ替え用タイトル</value></data>
+  <data name="SearchFieldPublisher" xml:space="preserve"><value>発売元</value></data>
+  <data name="SearchFieldStudioLabel" xml:space="preserve"><value>スタジオ / レーベル</value></data>
+  <data name="SearchFieldReleaseDate" xml:space="preserve"><value>発売日</value></data>
+  <data name="SearchFieldPerformers" xml:space="preserve"><value>出演者</value></data>
+  <data name="SearchFieldCountries" xml:space="preserve"><value>国</value></data>
+  <data name="SearchFieldTags" xml:space="preserve"><value>タグ</value></data>
+  <data name="SearchFieldGenres" xml:space="preserve"><value>ジャンル</value></data>
+  <data name="SearchFieldCategories" xml:space="preserve"><value>カテゴリー</value></data>
+  <data name="SearchFieldContentRating" xml:space="preserve"><value>年齢制限</value></data>
+  <data name="SearchFieldDescription" xml:space="preserve"><value>説明</value></data>
+  <data name="SearchFieldComments" xml:space="preserve"><value>コメント</value></data>
+  <data name="SearchFieldCoverArt" xml:space="preserve"><value>カバー画像のパス</value></data>
+  <data name="EditXnfo" xml:space="preserve"><value>メタデータを編集</value></data>
+  <data name="XnfoEditError" xml:space="preserve"><value>メタデータを編集できません: {0}</value></data>
+  <data name="XnfoEditorTitle" xml:space="preserve"><value>XNFO メタデータを編集</value></data>
+  <data name="XnfoTitle" xml:space="preserve"><value>タイトル</value></data>
+  <data name="XnfoSubtitle" xml:space="preserve"><value>サブタイトル</value></data>
+  <data name="XnfoSortTitle" xml:space="preserve"><value>並べ替え用タイトル</value></data>
+  <data name="XnfoPublisher" xml:space="preserve"><value>発売元</value></data>
+  <data name="XnfoStudioLabel" xml:space="preserve"><value>スタジオ / レーベル</value></data>
+  <data name="XnfoReleaseDate" xml:space="preserve"><value>発売日（YYYY、YYYY-MM、または YYYY-MM-DD）</value></data>
+  <data name="XnfoContentRating" xml:space="preserve"><value>年齢制限</value></data>
+  <data name="XnfoDescription" xml:space="preserve"><value>説明</value></data>
+  <data name="XnfoComments" xml:space="preserve"><value>コメント</value></data>
+  <data name="XnfoCoverPath" xml:space="preserve"><value>カバー画像のパス（メディアファイルからの相対パスまたは絶対パス）</value></data>
+  <data name="XnfoPerformers" xml:space="preserve"><value>出演者（1行に1件）</value></data>
+  <data name="XnfoCountries" xml:space="preserve"><value>国（ISO alpha-2 コードを選択）</value></data>
+  <data name="XnfoCountrySearch" xml:space="preserve"><value>国名またはコードで検索</value></data>
+  <data name="XnfoCountriesSelected" xml:space="preserve"><value>{0}件を選択中</value></data>
+  <data name="XnfoCountryInvalidEntry" xml:space="preserve"><value>無効な国コードです。チェックを外して削除してください</value></data>
+  <data name="XnfoInvalidCountries" xml:space="preserve"><value>確定する前に無効な国の項目を削除してください。</value></data>
+  <data name="XnfoTags" xml:space="preserve"><value>タグ（1行に1件）</value></data>
+  <data name="XnfoGenres" xml:space="preserve"><value>ジャンル（1行に1件）</value></data>
+  <data name="XnfoCategories" xml:space="preserve"><value>カテゴリー（1行に1件）</value></data>
+  <data name="XnfoConfirm" xml:space="preserve"><value>OK</value></data>
+  <data name="XnfoBrowse" xml:space="preserve"><value>参照…</value></data>
+  <data name="XnfoChooseCover" xml:space="preserve"><value>カバー画像を選択</value></data>
+  <data name="XnfoImages" xml:space="preserve"><value>画像</value></data>
+  <data name="XnfoCoverLocalRequired" xml:space="preserve"><value>ローカルの画像ファイルを選択してください。</value></data>
+  <data name="XnfoCoverBrowseError" xml:space="preserve"><value>カバー画像を参照できません。メディアとカバーのパスを確認してください。</value></data>
+  <data name="XnfoInvalidReleaseDate" xml:space="preserve"><value>発売日は YYYY、YYYY-MM、YYYY-MM-DD の形式で正しく入力するか、空欄にしてください。</value></data>
+  <data name="XnfoInvalidCoverPath" xml:space="preserve"><value>カバー画像またはメディアのパスが無効です。</value></data>
 </root>

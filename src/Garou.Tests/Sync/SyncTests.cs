@@ -518,7 +518,7 @@ public sealed class SyncTests
     }
 
     [Fact]
-    public async Task WhenWatcherReportsRenameThenOldPathIsDeletedAndNewPathIsIndexed()
+    public async Task WhenWatcherReportsRenameOfUnknownFileThenNewPathIsIndexed()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = Path.Combine(Path.GetTempPath(), $"rename-{Guid.NewGuid():N}");
@@ -538,7 +538,7 @@ public sealed class SyncTests
         {
             await CreateService(repository, watcher, library).RunAsync(stop.Token);
 
-            Assert.Equal([oldPath], repository.DeletedPaths);
+            Assert.Empty(repository.DeletedPaths);
             Assert.Contains(repository.Upserted, file => file.Path == newPath);
         }
         finally
@@ -760,6 +760,8 @@ public sealed class SyncTests
 
             return Task.CompletedTask;
         }
+
+        public Task<bool> MoveAsync(string oldPath, MediaFile updatedFile, CancellationToken cancellationToken) => Task.FromResult(false);
 
         public Task UpdateThumbnailPathAsync(Guid mediaFileId, string? thumbnailPath, CancellationToken cancellationToken) => Task.CompletedTask;
 

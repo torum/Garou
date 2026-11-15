@@ -8,6 +8,27 @@ public enum MediaSortField
     FileSize
 }
 
+public enum MediaSearchField
+{
+    All,
+    FileName,
+    Title,
+    Subtitle,
+    SortTitle,
+    Publisher,
+    StudioLabel,
+    ReleaseDate,
+    Performers,
+    Countries,
+    Tags,
+    Genres,
+    Categories,
+    ContentRating,
+    Description,
+    Comments,
+    CoverArt
+}
+
 [Flags]
 public enum MediaTypeFilter
 {
@@ -26,7 +47,8 @@ public sealed record MediaQuery(
     bool Descending,
     Guid AfterId,
     int PageSize,
-    bool IncludeDescendants = true);
+    bool IncludeDescendants = true,
+    MediaSearchField SearchField = MediaSearchField.All);
 
 public sealed record BuiltQuery(string Sql, IReadOnlyDictionary<string, object?> Parameters);
 
@@ -41,6 +63,27 @@ public static class MediaQueryBuilder
             [MediaSortField.FileName] = "FileName",
             [MediaSortField.ModifiedDateUtc] = "ModifiedDateUtc",
             [MediaSortField.FileSize] = "FileSize"
+        };
+
+    private static readonly IReadOnlyDictionary<MediaSearchField, string> SearchExpressions =
+        new Dictionary<MediaSearchField, string>
+        {
+            [MediaSearchField.FileName] = "FileName LIKE $search ESCAPE '\\'",
+            [MediaSearchField.Title] = "x.Title LIKE $search ESCAPE '\\'",
+            [MediaSearchField.Subtitle] = "x.Subtitle LIKE $search ESCAPE '\\'",
+            [MediaSearchField.SortTitle] = "x.SortTitle LIKE $search ESCAPE '\\'",
+            [MediaSearchField.Publisher] = "x.Publisher LIKE $search ESCAPE '\\'",
+            [MediaSearchField.StudioLabel] = "x.StudioLabel LIKE $search ESCAPE '\\'",
+            [MediaSearchField.ReleaseDate] = "x.ReleaseDate LIKE $search ESCAPE '\\'",
+            [MediaSearchField.Performers] = "EXISTS (SELECT 1 FROM json_each(x.Performers) WHERE value LIKE $search ESCAPE '\\')",
+            [MediaSearchField.Countries] = "EXISTS (SELECT 1 FROM json_each(x.Countries) WHERE value LIKE $search ESCAPE '\\')",
+            [MediaSearchField.Tags] = "EXISTS (SELECT 1 FROM json_each(x.Tags) WHERE value LIKE $search ESCAPE '\\')",
+            [MediaSearchField.Genres] = "EXISTS (SELECT 1 FROM json_each(x.Genres) WHERE value LIKE $search ESCAPE '\\')",
+            [MediaSearchField.Categories] = "EXISTS (SELECT 1 FROM json_each(x.Categories) WHERE value LIKE $search ESCAPE '\\')",
+            [MediaSearchField.ContentRating] = "x.ContentRating LIKE $search ESCAPE '\\'",
+            [MediaSearchField.Description] = "x.Description LIKE $search ESCAPE '\\'",
+            [MediaSearchField.Comments] = "x.Comments LIKE $search ESCAPE '\\'",
+            [MediaSearchField.CoverArt] = "x.CoverArt LIKE $search ESCAPE '\\'"
         };
 
     private static (List<string> Conditions, Dictionary<string, object?> Parameters) BuildFilter(MediaQuery query)
@@ -58,7 +101,21 @@ public static class MediaQueryBuilder
 
         if (!string.IsNullOrWhiteSpace(query.SearchText))
         {
-            conditions.Add("FileName LIKE $search ESCAPE '\\'");
+            var field = query.SearchField;
+            if (field == MediaSearchField.FileName)
+            {
+                conditions.Add(SearchExpressions[field]);
+            }
+            else
+            {
+                var metadataExpression = field == MediaSearchField.All
+                    ? string.Join(" OR ", SearchExpressions.Where(pair => pair.Key != MediaSearchField.FileName).Select(pair => pair.Value))
+                    : SearchExpressions[field];
+                var metadataCondition = $"EXISTS (SELECT 1 FROM XnfoMetadata x WHERE x.MediaFileId = MediaFile.Id AND ({metadataExpression}))";
+                conditions.Add(field == MediaSearchField.All
+                    ? $"({SearchExpressions[MediaSearchField.FileName]} OR {metadataCondition})"
+                    : metadataCondition);
+            }
             parameters["$search"] = $"%{EscapeLike(query.SearchText.Trim())}%";
         }
 
@@ -128,7 +185,8 @@ public static class MediaQueryBuilder
 
         var sql = $"""
             SELECT Id, Path, FileName, Extension, MediaType, FileSize, HashValue, ThumbnailPath,
-                   CreatedDateUtc, ModifiedDateUtc, LastIndexedUtc, FolderId
+                   CreatedDateUtc, ModifiedDateUtc, LastIndexedUtc, FolderId,
+                   (SELECT CoverArt FROM XnfoMetadata WHERE MediaFileId = MediaFile.Id) AS CoverArt
             FROM MediaFile
             WHERE {string.Join(" AND ", conditions.DefaultIfEmpty("1 = 1"))}
             ORDER BY {orderBy};
@@ -155,7 +213,8 @@ public static class MediaQueryBuilder
 
         var sql = $"""
             SELECT Id, Path, FileName, Extension, MediaType, FileSize, HashValue, ThumbnailPath,
-                   CreatedDateUtc, ModifiedDateUtc, LastIndexedUtc, FolderId
+                   CreatedDateUtc, ModifiedDateUtc, LastIndexedUtc, FolderId,
+                   (SELECT CoverArt FROM XnfoMetadata WHERE MediaFileId = MediaFile.Id) AS CoverArt
             FROM MediaFile
             WHERE {string.Join(" AND ", conditions)}
             ORDER BY {orderBy}

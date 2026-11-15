@@ -20,6 +20,8 @@ public sealed class MediaFile
 
     public string? ThumbnailPath { get; init; }
 
+    public string? CoverArt { get; init; }
+
     public DateTime? CreatedDateUtc { get; init; }
 
     public DateTime? ModifiedDateUtc { get; init; }
@@ -38,6 +40,7 @@ public sealed class MediaFile
         FileSize = FileSize,
         HashValue = HashValue,
         ThumbnailPath = thumbnailPath,
+        CoverArt = CoverArt,
         CreatedDateUtc = CreatedDateUtc,
         ModifiedDateUtc = ModifiedDateUtc,
         LastIndexedUtc = LastIndexedUtc,

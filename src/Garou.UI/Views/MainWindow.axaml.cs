@@ -187,18 +187,20 @@ public partial class MainWindow : Window
         await new SettingsWindow().ShowDialog(this);
     }
 
-    private void OnMenuFlyoutOpened(object? sender, EventArgs e)
+    private async void OnMenuFlyoutOpened(object? sender, EventArgs e)
     {
         if (sender is not MenuFlyout menuFlyout)
         {
             return;
         }
 
-        if (menuFlyout.Target?.DataContext is FolderNode folderNode)
+        var folderNode = menuFlyout.Target?.DataContext as FolderNode;
+        foreach (var menuItem in menuFlyout.Items.OfType<MenuItem>())
         {
-            foreach (var menuItem in menuFlyout.Items.OfType<MenuItem>())
+            menuItem.DataContext = folderNode;
+            if (Equals(menuItem.Tag, "RescanLibrary"))
             {
-                menuItem.DataContext = folderNode;
+                menuItem.IsVisible = false;
             }
         }
 
@@ -212,6 +214,24 @@ public partial class MainWindow : Window
             }
 
             menuItem.Header = localizer[tag];
+        }
+
+        if (folderNode is not null && DataContext is MainViewModel viewModel)
+        {
+            try
+            {
+                var isLibraryRoot = await viewModel.IsLibraryRootAsync(folderNode.PathText, CancellationToken.None);
+                if (menuFlyout.IsOpen && ReferenceEquals(menuFlyout.Target?.DataContext, folderNode))
+                {
+                    var rescanItem = menuFlyout.Items.OfType<MenuItem>().First(item => Equals(item.Tag, "RescanLibrary"));
+                    rescanItem.IsVisible = isLibraryRoot;
+                    rescanItem.IsEnabled = !viewModel.IsScanning;
+                }
+            }
+            catch (Exception exception)
+            {
+                viewModel.ReportError(string.Format(localizer["RescanLibraryLookupError"], exception.Message));
+            }
         }
     }
 
@@ -327,6 +347,33 @@ public partial class MainWindow : Window
         {
             mainViewModel.StatusText = "Could not determine the folder for the thumbnail cache command";
             mainViewModel.ReportError(mainViewModel.StatusText);
+        }
+    }
+
+    private async void OnRescanLibraryClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { DataContext: FolderNode node } || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var localizer = new ResourceLocalizer(CultureInfo.GetCultureInfo(_settingsSession.Current.Language == "ja" ? "ja" : "en"));
+        var dialog = new FAContentDialog
+        {
+            Title = localizer["RescanLibrary"],
+            Content = new TextBlock
+            {
+                Text = string.Format(localizer["RescanLibraryConfirmation"], node.PathText),
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap
+            },
+            PrimaryButtonText = localizer["RescanLibrary"],
+            CloseButtonText = localizer["CancelLabel"],
+            DefaultButton = FAContentDialogButton.Close
+        };
+
+        if (await dialog.ShowAsync(this) == FAContentDialogResult.Primary)
+        {
+            await viewModel.RescanLibraryAsync(node.PathText, CancellationToken.None);
         }
     }
 

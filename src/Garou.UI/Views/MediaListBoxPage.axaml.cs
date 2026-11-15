@@ -100,6 +100,35 @@ public partial class MediaListBoxPage : UserControl
         }
     }
 
+    private async void OnEditXnfoClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        var item = (sender as Control)?.DataContext as MediaItemViewModel ?? viewModel.SelectedItem;
+        if (item is null)
+        {
+            return;
+        }
+        var path = item.File.Path;
+        try
+        {
+            var metadata = await viewModel.LoadXnfoAsync(path, CancellationToken.None) ?? new XnfoMetadata();
+            var edited = await XnfoEditorDialog.ShowAsync(owner, path, metadata, _settingsSession.Current.Language);
+            if (edited is not null)
+            {
+                await viewModel.SaveXnfoAsync(path, edited, CancellationToken.None);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Xml.XmlException or InvalidOperationException or NotSupportedException)
+        {
+            var localizer = new ResourceLocalizer(CultureInfo.GetCultureInfo(_settingsSession.Current.Language == "ja" ? "ja" : "en"));
+            viewModel.ReportError(string.Format(localizer["XnfoEditError"], $"{path}: {exception.Message}"));
+        }
+    }
+
     private void OnVisibleItemsChanged(object? sender, List<object> items)
     {
         if (DataContext is MainViewModel viewModel)

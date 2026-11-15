@@ -28,7 +28,14 @@
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
 
-                    <TextBox MinWidth="140" Width="250" PlaceholderText="Search media" Text="{Binding SearchText}" VerticalAlignment="Center" />
+                    <ComboBox x:Name="SearchFieldSelector" Width="150" ItemsSource="{Binding Settings.SearchFieldOptions}" SelectedItem="{Binding SelectedSearchField, Mode=TwoWay}" AutomationProperties.Name="{Binding Settings.SearchFieldLabel}" VerticalAlignment="Center">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SearchFieldOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBox MinWidth="140" Width="250" PlaceholderText="{Binding Settings.SearchMediaLabel}" Text="{Binding SearchText}" VerticalAlignment="Center" />
 
                     <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"></Border>
 
@@ -102,6 +109,8 @@
                                 <Separator />
                                 <MenuItem Header="Open with viewer" Tag="viewer" Click="OnLaunchWithViewerClick" />
                                 <MenuItem Header="Open with editor" Tag="editor" Click="OnLaunchWithEditorClick" />
+                                <Separator />
+                                <MenuItem Header="Edit metadata" Tag="EditXnfo" Click="OnEditXnfoClick" />
                             </MenuFlyout>
                         </Border.ContextFlyout>
                         <StackPanel Spacing="4">
@@ -277,6 +286,11 @@
                     <SelectableTextBlock Text="{Binding FileName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <SelectableTextBlock Text="{Binding File.Path}" Opacity="0.75" TextWrapping="Wrap" />
                     <Button Content="Open containing folder" Click="OnOpenContainingFolderClick" />
+                    <Button Content="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).Settings.EditXnfoLabel}" Click="OnEditXnfoClick" />
+                    <StackPanel IsVisible="{Binding IsCoverArtUnavailable}">
+                        <SelectableTextBlock Text="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).Settings.CoverArtUnavailableLabel}" TextWrapping="Wrap" />
+                        <SelectableTextBlock Text="{Binding File.CoverArt}" TextWrapping="Wrap" />
+                    </StackPanel>
 
                     <Separator Margin="0,8" />
                     <Grid ColumnDefinitions="96,8,*">

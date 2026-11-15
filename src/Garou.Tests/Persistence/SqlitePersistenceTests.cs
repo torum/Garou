@@ -37,7 +37,7 @@ public sealed class SqlitePersistenceTests : IDisposable
             "SELECT GROUP_CONCAT(name, ',') FROM (SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name);";
 
         Assert.Equal(
-            "Folder,Library,LibraryExcludedFolder,MediaFile,MediaFileTag,Tag,ThumbnailCacheEntry",
+            "Folder,Library,LibraryExcludedFolder,MediaFile,MediaFileTag,Tag,ThumbnailCacheEntry,XnfoMetadata",
             await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 
@@ -246,6 +246,44 @@ public sealed class SqlitePersistenceTests : IDisposable
 
         var updated = await repository.GetByIdAsync(media.Id, CancellationToken.None);
         Assert.Null(updated?.ThumbnailPath);
+    }
+
+    [Fact]
+    public async Task WhenTaggedFileIsDeletedThenItsAssignmentIsRemoved()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(cancellationToken);
+        var media = new MediaFileRepository(_connectionFactory);
+        var file = CreateMediaFile("deleted.jpg", 1);
+        await media.UpsertBatchAsync([file], cancellationToken);
+        var tags = new TagRepository(_connectionFactory);
+        var tagId = await tags.AddAsync(new Tag { Name = "favorite" }, cancellationToken);
+        await tags.AssignAsync(new MediaFileTag { MediaFileId = file.Id, TagId = tagId }, cancellationToken);
+
+        await media.DeleteByPathAsync(file.Path, cancellationToken);
+
+        Assert.Null(await media.GetByIdAsync(file.Id, cancellationToken));
+        Assert.NotNull(await tags.GetByNameAsync("favorite", cancellationToken));
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM MediaFileTag;";
+        Assert.Equal(0L, await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    [Fact]
+    public async Task WhenMoveDestinationAlreadyExistsThenBothRecordsArePreserved()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await new DatabaseInitializer(_connectionFactory).InitializeAsync(cancellationToken);
+        var media = new MediaFileRepository(_connectionFactory);
+        var original = CreateMediaFile("original.jpg", 1);
+        var destination = CreateMediaFile("destination.jpg", 2);
+        await media.UpsertBatchAsync([original, destination], cancellationToken);
+
+        await Assert.ThrowsAsync<SqliteException>(() => media.MoveAsync(original.Path, destination, cancellationToken));
+
+        Assert.Equal(original.Id, (await media.GetByPathAsync(original.Path, cancellationToken))!.Id);
+        Assert.Equal(destination.Id, (await media.GetByPathAsync(destination.Path, cancellationToken))!.Id);
     }
 
     [Fact]

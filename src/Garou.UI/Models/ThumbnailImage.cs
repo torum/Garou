@@ -9,12 +9,26 @@ public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
     private Bitmap? _bitmap;
     private ThumbnailLoadState _state = ThumbnailLoadState.Loading;
     private bool _disposed;
+    private bool _primaryFailed;
 
-    public ThumbnailImage(string path)
+    public ThumbnailImage(string path, string? fallbackPath = null)
     {
         if (!string.IsNullOrEmpty(path))
         {
-            _ = LoadAsync(path);
+            _ = LoadAsync(path, fallbackPath);
+        }
+    }
+
+    public bool PrimaryFailed
+    {
+        get => _primaryFailed;
+        private set
+        {
+            if (_primaryFailed != value)
+            {
+                _primaryFailed = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PrimaryFailed)));
+            }
         }
     }
 
@@ -56,7 +70,7 @@ public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
         Bitmap = null;
     }
 
-    private async Task LoadAsync(string path)
+    private async Task LoadAsync(string path, string? fallbackPath)
     {
         try
         {
@@ -77,8 +91,16 @@ public sealed class ThumbnailImage : INotifyPropertyChanged, IDisposable
         }
         catch (Exception exception)
         {
-            State = ThumbnailLoadState.Failed;
             Debug.WriteLine($"[ThumbnailImage] Failed to load '{path}': {exception.GetType().Name} {exception.Message}");
+            if (!_disposed && !string.IsNullOrEmpty(fallbackPath) && File.Exists(fallbackPath))
+            {
+                PrimaryFailed = true;
+                await LoadAsync(fallbackPath, null);
+            }
+            else
+            {
+                State = ThumbnailLoadState.Failed;
+            }
         }
     }
 
