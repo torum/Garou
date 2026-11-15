@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<TargetFramework>net11.0</TargetFramework>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<Nullable>enable</Nullable>
+	<IsPackable>false</IsPackable>
+	<UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+	  <Features>runtime-async=on</Features>
+    <IsAotCompatible>false</IsAotCompatible>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>false</EnableAotAnalyzer>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.6" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3.mtp-v2" Version="3.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Garou.Application/Garou.Application.csproj" />
+    <ProjectReference Include="../../src/Garou.Domain/Garou.Domain.csproj" />
+    <ProjectReference Include="../../src/Garou.Infrastructure/Garou.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Garou.Localization/Garou.Localization.csproj" />
+    <ProjectReference Include="../../src/Garou.UI/Garou.UI.csproj" />
+  </ItemGroup>
+
+</Project>

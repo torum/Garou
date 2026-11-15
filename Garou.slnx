@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+	<Project Path="src/Garou.Application/Garou.Application.csproj" />
+	<Project Path="src/Garou.Domain/Garou.Domain.csproj" />
+	<Project Path="src/Garou.Infrastructure/Garou.Infrastructure.csproj" />
+	<Project Path="src/Garou.Localization/Garou.Localization.csproj" />
+	<Project Path="src/Garou.UI/Garou.UI.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+	<Project Path="tests/Garou.Tests/Garou.Tests.csproj" />
+  </Folder>
+</Solution>

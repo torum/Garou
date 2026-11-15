@@ -4,6 +4,7 @@ using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Headless;
+using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
 using Avalonia.Themes.Fluent;
 using Garou.Domain.Entities;
@@ -12,64 +13,59 @@ using Garou.ViewModels;
 
 namespace Garou.Tests.Thumbnails;
 
+[Collection("Avalonia UI")]
 public sealed class ThumbnailLifetimeTests
 {
-    [Fact]
+    [AvaloniaFact]
     public async Task DisposingMediaItemKeepsDisplayedBitmapUsableDuringLayout()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var path = Path.GetTempFileName();
         try
         {
-            await using var session = HeadlessUnitTestSession.StartNew(typeof(Avalonia.Application));
-            await session.Dispatch(async () =>
+            Avalonia.Application.Current!.Styles.Add(new FluentTheme());
+            var item = new MediaItemViewModel(new MediaFile
             {
-                Avalonia.Application.Current!.Styles.Add(new FluentTheme());
-                var item = new MediaItemViewModel(new MediaFile
-                {
-                    Path = path,
-                    FileName = Path.GetFileName(path),
-                    Extension = Path.GetExtension(path),
-                    ThumbnailPath = path
-                });
-                var thumbnail = Assert.IsType<ThumbnailImage>(item.Thumbnail);
-                await WaitForThumbnailAsync(thumbnail, cancellationToken);
+                Path = path,
+                FileName = Path.GetFileName(path),
+                Extension = Path.GetExtension(path),
+                ThumbnailPath = path
+            });
+            var thumbnail = Assert.IsType<ThumbnailImage>(item.Thumbnail);
+            await WaitForThumbnailAsync(thumbnail, cancellationToken);
 
-                var bitmap = Assert.IsAssignableFrom<Bitmap>(thumbnail.Bitmap);
-                Image? outgoingImage = null;
-                var transition = new TransitioningContentControl
-                {
-                    ContentTemplate = new FuncDataTemplate<Bitmap>((value, _) => outgoingImage = new Image { Source = value }),
-                    PageTransition = new CrossFade(TimeSpan.FromSeconds(1)),
-                    Content = bitmap
-                };
-                var window = new Window { Content = transition, Width = 100, Height = 100 };
-                try
-                {
-                    window.Show();
-                    window.UpdateLayout();
-                    var image = Assert.IsType<Image>(outgoingImage);
+            var bitmap = Assert.IsAssignableFrom<Bitmap>(thumbnail.Bitmap);
+            Image? outgoingImage = null;
+            var transition = new TransitioningContentControl
+            {
+                ContentTemplate = new FuncDataTemplate<Bitmap>((value, _) => outgoingImage = new Image { Source = value }),
+                PageTransition = new CrossFade(TimeSpan.FromSeconds(1)),
+                Content = bitmap
+            };
+            var window = new Window { Content = transition, Width = 100, Height = 100 };
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+                var image = Assert.IsType<Image>(outgoingImage);
 
-                    item.Dispose();
-                    Assert.Null(thumbnail.Bitmap);
-                    transition.Content = null;
-                    window.UpdateLayout();
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                    image.InvalidateMeasure();
-                    image.Measure(new Size(100, 100));
+                item.Dispose();
+                Assert.Null(thumbnail.Bitmap);
+                transition.Content = null;
+                window.UpdateLayout();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                image.InvalidateMeasure();
+                image.Measure(new Size(100, 100));
 
-                    Assert.Same(bitmap, image.Source);
-                    Assert.Equal(new Size(1, 1), bitmap.Size);
-                    Assert.True(image.DesiredSize.Width > 0);
-                }
-                finally
-                {
-                    window.Close();
-                }
-
-                return true;
-            }, cancellationToken);
+                Assert.Same(bitmap, image.Source);
+                Assert.Equal(new Size(1, 1), bitmap.Size);
+                Assert.True(image.DesiredSize.Width > 0);
+            }
+            finally
+            {
+                window.Close();
+            }
         }
         finally
         {
@@ -85,7 +81,7 @@ public sealed class ThumbnailLifetimeTests
         try
         {
             WeakReference bitmapReference;
-            await using (var session = HeadlessUnitTestSession.StartNew(typeof(Avalonia.Application)))
+            await using (var session = HeadlessUnitTestSession.StartNew(typeof(Garou.App)))
             {
                 bitmapReference = await session.Dispatch(async () =>
                 {
