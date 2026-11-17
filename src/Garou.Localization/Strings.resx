@@ -242,8 +242,16 @@
 	<value>Error</value>
   </data>
   <data name="InitialLoadingTitle" xml:space="preserve"><value>Loading library</value></data>
-  <data name="InitialLoadingMessage" xml:space="preserve"><value>Opening the database and loading saved folders and media...</value></data>
+  <data name="InitialLoadingDatabase" xml:space="preserve"><value>Opening the database and checking its schema. A sleeping drive may take time to wake up...</value></data>
+  <data name="InitialLoadingFolders" xml:space="preserve"><value>Loading saved folders and building the folder tree...</value></data>
+  <data name="InitialLoadingTree" xml:space="preserve"><value>Restoring the selected folder and expanded folder tree...</value></data>
+  <data name="InitialLoadingMedia" xml:space="preserve"><value>Loading saved media for the selected folder...</value></data>
+  <data name="InitialLoadingSorting" xml:space="preserve"><value>Sorting media and preparing items...</value></data>
+  <data name="InitialLoadingDisplay" xml:space="preserve"><value>Adding media to the library view...</value></data>
+  <data name="InitialLoadingLayout" xml:space="preserve"><value>Preparing the window layout and visible thumbnails. A sleeping drive may take time to wake up...</value></data>
   <data name="ScanOfflineMessage" xml:space="preserve"><value>{0} is unavailable. The app will retry automatically.</value></data>
+  <data name="MediaUnavailable" xml:space="preserve"><value>{0} is unavailable. Its drive, folder, or file may be missing.</value></data>
+  <data name="FolderAvailabilityError" xml:space="preserve"><value>Could not check folder availability: {0}</value></data>
   <data name="ScanFoundCount" xml:space="preserve"><value>{0} — {1:N0} files found</value></data>
   <data name="ScanTitle" xml:space="preserve"><value>Scanning library</value></data>
   <data name="ScanStarting" xml:space="preserve"><value>Preparing {0}...</value></data>
@@ -259,6 +267,7 @@
   <data name="ScanCount" xml:space="preserve"><value>{0} — {1:N0} / {2:N0}</value></data>
   <data name="ScanBusy" xml:space="preserve"><value>Wait for the current library operation to finish.</value></data>
   <data name="ScanFailed" xml:space="preserve"><value>Could not scan or refresh {0}: {1}</value></data>
+  <data name="ScanSkippedItems" xml:space="preserve"><value>While scanning {0}, {1} item(s) could not be read, e.g. {2}</value></data>
   <data name="ExcludedFoldersLabel" xml:space="preserve"><value>Excluded folders</value></data>
   <data name="ExcludedFoldersDescription" xml:space="preserve"><value>Restore a folder to rescan affected libraries. Other excluded folders and scan settings still apply.</value></data>
   <data name="RestoreFolderLabel" xml:space="preserve"><value>Restore</value></data>

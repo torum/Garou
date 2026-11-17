@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Garou.Domain.Abstractions;
 using Garou.Domain.Entities;
 
@@ -5,8 +6,26 @@ namespace Garou.Application.Queries;
 
 public sealed record MediaPage(IReadOnlyList<MediaFile> Items, Guid? NextAfterId);
 
-public sealed record FolderNode(Folder Folder, IReadOnlyList<FolderNode> Children, bool IsRoot)
+public sealed record FolderNode(Folder Folder, IReadOnlyList<FolderNode> Children, bool IsRoot) : INotifyPropertyChanged
 {
+    private bool? _isAvailable;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public bool? IsAvailable
+    {
+        get => _isAvailable;
+        set
+        {
+            if (_isAvailable == value) return;
+            _isAvailable = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsAvailable)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AvailabilityOpacity)));
+        }
+    }
+
+    public double AvailabilityOpacity => IsAvailable == false ? 0.6 : 1.0;
+
     public string DisplayName => IsRoot
         ? Folder.Path
         : Path.GetFileName(Folder.Path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));

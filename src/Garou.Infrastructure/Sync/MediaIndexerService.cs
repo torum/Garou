@@ -27,6 +27,8 @@ public sealed class MediaIndexerService(
     public event Action<string>? AutomaticScanStarted;
     public event Action<ScanProgress>? AutomaticScanProgress;
     public event Action<string, bool, Exception?>? AutomaticScanFinished;
+    public event Action<string, string>? IndexingIssue;
+    public event Action<string, int, string>? ItemsSkipped;
 
     internal Func<string, IEnumerable<string>> EnumerateDirectoryEntries { get; set; } =
         path => Directory.EnumerateFileSystemEntries(path);
@@ -46,19 +48,36 @@ public sealed class MediaIndexerService(
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            using (await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false))
+            var scanCompleted = false;
+            try
             {
-                await RunAutomaticScanAsync(library, clearSuppressedPaths: true, cancellationToken).ConfigureAwait(false);
-            }
-            if (!library.IsOnline)
-            {
-                await Task.Delay(OfflineRetryInterval, timeProvider, cancellationToken).ConfigureAwait(false);
-                continue;
-            }
+                using (await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    await RunAutomaticScanAsync(library, clearSuppressedPaths: true, cancellationToken).ConfigureAwait(false);
+                }
+                scanCompleted = true;
+                if (!library.IsOnline)
+                {
+                    await Task.Delay(OfflineRetryInterval, timeProvider, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
 
-            await foreach (var change in watcher.WatchAsync(library, cancellationToken).ConfigureAwait(false))
+                await foreach (var change in watcher.WatchAsync(library, cancellationToken).ConfigureAwait(false))
+                {
+                    await HandleAsync(library, change, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                await HandleAsync(library, change, cancellationToken).ConfigureAwait(false);
+                // A failed scan or watcher must not permanently stop this library's indexing.
+                System.Diagnostics.Debug.WriteLine($"Indexing of '{library.RootPath}' failed: {exception}");
+                if (scanCompleted)
+                {
+                    // Scan failures are already reported through AutomaticScanFinished.
+                    IndexingIssue?.Invoke(library.RootPath, exception.Message);
+                }
+
+                await Task.Delay(OfflineRetryInterval, timeProvider, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -121,6 +140,7 @@ public sealed class MediaIndexerService(
         var excludedPaths = await excludedFolders.GetPathsAsync(library.Id, cancellationToken).ConfigureAwait(false);
         var files = new List<string>();
         var unreadableDirectories = new List<string>();
+        var skippedEntries = new List<string>();
         var pendingDirectories = new Stack<string>();
         var enumerationTimestamp = timeProvider.GetTimestamp();
         pendingDirectories.Push(library.RootPath);
@@ -137,7 +157,27 @@ public sealed class MediaIndexerService(
                         continue;
                     }
 
-                    if ((File.GetAttributes(path) & FileAttributes.Directory) != 0)
+                    bool isDirectory;
+                    try
+                    {
+                        var attributes = File.GetAttributes(path);
+                        if ((attributes & FileAttributes.ReparsePoint) != 0)
+                        {
+                            continue;
+                        }
+
+                        isDirectory = (attributes & FileAttributes.Directory) != 0;
+                    }
+                    catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
+                    {
+                        // An entry that vanished or is unreadable must not abort the rest of its folder.
+                        System.Diagnostics.Debug.WriteLine($"Could not read entry '{path}': {exception.Message}");
+                        skippedEntries.Add(path);
+
+                        continue;
+                    }
+
+                    if (isDirectory)
                     {
                         if (settingsSession.Current.ScanSubfolders)
                         {
@@ -166,6 +206,12 @@ public sealed class MediaIndexerService(
                     return;
                 }
             }
+        }
+
+        skippedEntries.AddRange(unreadableDirectories);
+        if (skippedEntries.Count > 0)
+        {
+            ItemsSkipped?.Invoke(library.RootPath, skippedEntries.Count, skippedEntries[0]);
         }
 
         progress?.Report(new ScanProgress("ScanReadingIndex", 0, 0));

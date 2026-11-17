@@ -291,6 +291,7 @@ public partial class MainWindow : Window
             viewModel.ShowInitialLoading();
             await App.StartupTask.WaitAsync(viewModel.LifetimeToken);
             await viewModel.InitializeAsync(viewModel.LifetimeToken);
+            await viewModel.ReportInitialLoadingAsync("InitialLoadingLayout", viewModel.LifetimeToken);
             MainLayoutGrid.ColumnDefinitions[0].Width = new GridLength(viewModel.LeftPaneWidth);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {

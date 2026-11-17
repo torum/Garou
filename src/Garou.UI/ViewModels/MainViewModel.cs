@@ -45,6 +45,7 @@ public partial class MainViewModel(
     private Guid? _selectedFolderId;
     private CancellationTokenSource? _reloadCts;
     private CancellationTokenSource? _selectedMetadataCts;
+    private CancellationTokenSource? _folderAvailabilityCts;
     private bool _isInitializing;
     private bool _isGeneratingThumbnails;
     private bool _suppressSelectedFolderReload;
@@ -59,6 +60,7 @@ public partial class MainViewModel(
     private bool _thumbnailRegenerationWorkerRunning;
     private bool _xnfoSubscribed;
     private bool _disposed;
+    private readonly HashSet<string> _offlineLibraryPaths = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private int _scanVersion;
     private int _activeScanOperations;
     private readonly CancellationTokenSource _lifetimeCts = new();
@@ -70,11 +72,14 @@ public partial class MainViewModel(
     {
         _disposed = true;
         _lifetimeCts.Cancel();
+        _folderAvailabilityCts?.Cancel();
         if (_xnfoSubscribed)
         {
             indexer.AutomaticScanStarted -= OnAutomaticScanStarted;
             indexer.AutomaticScanProgress -= OnAutomaticScanProgress;
             indexer.AutomaticScanFinished -= OnAutomaticScanFinished;
+            indexer.IndexingIssue -= OnIndexingIssue;
+            indexer.ItemsSkipped -= OnItemsSkipped;
             xnfoIndex.IndexingError -= OnXnfoIndexingError;
             xnfoIndex.MetadataChanged -= OnXnfoMetadataChanged;
             _xnfoSubscribed = false;
@@ -412,6 +417,8 @@ public partial class MainViewModel(
 
         try
         {
+            if (!await IsMediaAvailableAsync(selectedItem.File, cancellation.Token))
+                return;
             var metadata = await metadataExtraction.ExtractAsync(selectedItem.File.Path, cancellation.Token);
             if (!cancellation.IsCancellationRequested && ReferenceEquals(SelectedItem, selectedItem))
             {
@@ -423,6 +430,14 @@ public partial class MainViewModel(
         }
         catch (Exception ex)
         {
+            var stillAvailable = await Task.Run(() => File.Exists(selectedItem.File.Path));
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(SelectedItem, selectedItem))
+                return;
+            if (!stillAvailable)
+            {
+                StatusText = string.Format(Localize("MediaUnavailable"), selectedItem.File.FileName);
+                return;
+            }
             var message = $"Metadata extraction failed for '{selectedItem.File.Path}': {ex.Message}";
             ReportError(message);
             Debug.WriteLine($"[MainViewModel] {message}");
@@ -633,8 +648,16 @@ public partial class MainViewModel(
     public void ShowInitialLoading()
     {
         ScanInfoTitle = Localize("InitialLoadingTitle");
-        ScanInfoMessage = Localize("InitialLoadingMessage");
+        ScanInfoMessage = Localize("InitialLoadingDatabase");
         IsScanInfoOpen = true;
+    }
+
+    public async Task ReportInitialLoadingAsync(string resourceKey, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ScanInfoMessage = Localize(resourceKey);
+        Log($"Startup phase: {resourceKey}");
+        await Dispatcher.UIThread.InvokeAsync(cancellationToken.ThrowIfCancellationRequested, DispatcherPriority.Background);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -650,6 +673,8 @@ public partial class MainViewModel(
         indexer.AutomaticScanStarted += OnAutomaticScanStarted;
         indexer.AutomaticScanProgress += OnAutomaticScanProgress;
         indexer.AutomaticScanFinished += OnAutomaticScanFinished;
+        indexer.IndexingIssue += OnIndexingIssue;
+        indexer.ItemsSkipped += OnItemsSkipped;
         Log("Initialize started");
         _isInitializing = true;
         var appSettings = settingsSession.Current;
@@ -667,8 +692,10 @@ public partial class MainViewModel(
         IncludeAudio = appSettings.IncludeAudio;
         ThumbnailSize = Math.Clamp(appSettings.ThumbnailSize, MinThumbnailSize, MaxThumbnailSize);
         LeftPaneWidth = Math.Clamp(appSettings.LeftPaneWidth, MinLeftPaneWidth, MaxLeftPaneWidth);
+        await ReportInitialLoadingAsync("InitialLoadingFolders", cancellationToken);
         await LoadFolderTreeAsync(cancellationToken);
 
+        await ReportInitialLoadingAsync("InitialLoadingTree", cancellationToken);
         FolderNode? selectedNode = null;
         if (appSettings.SelectedFolderId is { } savedFolderId)
         {
@@ -690,6 +717,7 @@ public partial class MainViewModel(
         }
 
         FolderRestored?.Invoke(selectedNode);
+        await Dispatcher.UIThread.InvokeAsync(cancellationToken.ThrowIfCancellationRequested, DispatcherPriority.Background);
         await ReloadAsync(_selectedFolderId, cancellationToken);
 
         Log("Initialize completed");
@@ -879,11 +907,16 @@ public partial class MainViewModel(
                 var staleFiles = new List<MediaFile>(visibleFiles.Count);
                 foreach (var file in visibleFiles)
                 {
+                    var folder = file.FolderId is { } folderId ? FindFolderNode(FolderTree, folderId) : null;
+                    if (folder?.IsAvailable == false)
+                        continue;
                     var thumbnailPath = file.ThumbnailPath;
                     if (thumbnailPath is null ||
                         !thumbnailPath.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ||
                         !File.Exists(thumbnailPath))
                     {
+                        if (folder is not null && !await Task.Run(() => File.Exists(file.Path)))
+                            continue;
                         if (thumbnailGenerator.HasFailed(file))
                         {
                             SetThumbnailState(file.Id, ThumbnailLoadState.Failed);
@@ -987,6 +1020,8 @@ public partial class MainViewModel(
             {
                 break;
             }
+            if (file.FolderId is { } folderId && FindFolderNode(FolderTree, folderId)?.IsAvailable == false)
+                continue;
 
             ThumbnailStatusText = $"Updating thumbnails: {progressVerb} {file.FileName}";
             SetThumbnailState(file.Id, ThumbnailLoadState.Loading);
@@ -1042,6 +1077,96 @@ public partial class MainViewModel(
         }
 
         Log($"Folder tree loaded: roots={FolderTree.Count}");
+        StartFolderAvailabilityChecks();
+    }
+
+    private void StartFolderAvailabilityChecks()
+    {
+        _folderAvailabilityCts?.Cancel();
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
+        _folderAvailabilityCts = cancellation;
+        var roots = FolderTree.ToArray();
+        _ = CheckFolderAvailabilityAsync(roots, cancellation);
+    }
+
+    private async Task CheckFolderAvailabilityAsync(IReadOnlyList<FolderNode> roots, CancellationTokenSource cancellation)
+    {
+        try
+        {
+            async Task CheckNodeAsync(FolderNode node, bool parentAvailable, bool retryOnly)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                var available = parentAvailable && !_offlineLibraryPaths.Contains(Path.TrimEndingDirectorySeparator(node.PathText)) &&
+                    (retryOnly && node.IsAvailable == true ||
+                    await Task.Run(() => Directory.Exists(node.PathText), cancellation.Token));
+                cancellation.Token.ThrowIfCancellationRequested();
+                var wasUnavailable = node.IsAvailable == false;
+                node.IsAvailable = available;
+                if (available && wasUnavailable)
+                    RequestVisibleThumbnailRegeneration();
+                foreach (var child in node.Children)
+                    await CheckNodeAsync(child, available, retryOnly);
+            }
+
+            async Task CheckRootAsync(FolderNode root)
+            {
+                try
+                {
+                    var retryOnly = false;
+                    while (true)
+                    {
+                        await CheckNodeAsync(root, true, retryOnly);
+                        retryOnly = true;
+                        await Task.Delay(TimeSpan.FromSeconds(30), cancellation.Token);
+                    }
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                }
+                catch (Exception exception)
+                {
+                    if (!_disposed)
+                        ReportError(string.Format(Localize("FolderAvailabilityError"), exception.Message));
+                }
+            }
+
+            await Task.WhenAll(roots.Select(CheckRootAsync));
+        }
+        finally
+        {
+            if (ReferenceEquals(_folderAvailabilityCts, cancellation))
+                _folderAvailabilityCts = null;
+            cancellation.Dispose();
+        }
+    }
+
+    public async Task<bool> IsMediaAvailableAsync(MediaFile file, CancellationToken cancellationToken)
+    {
+        var exists = await Task.Run(() => File.Exists(file.Path), cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!exists)
+        {
+            StatusText = string.Format(Localize("MediaUnavailable"), file.FileName);
+            var folder = file.FolderId is { } folderId ? FindFolderNode(FolderTree, folderId) : null;
+            if (folder is not null && !await Task.Run(() => Directory.Exists(folder.PathText), cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (folder.IsAvailable != false)
+                {
+                    SetFolderAvailability(folder, false);
+                    StartFolderAvailabilityChecks();
+                }
+            }
+        }
+        return exists;
+    }
+
+    private static void SetFolderAvailability(FolderNode node, bool available)
+    {
+        node.IsAvailable = available;
+        if (!available)
+            foreach (var child in node.Children)
+                SetFolderAvailability(child, false);
     }
 
     private static FolderNode? FindFolderNode(IEnumerable<FolderNode> nodes, Guid folderId)
@@ -1326,6 +1451,8 @@ public partial class MainViewModel(
         {
             await Task.Run(() => scan(progress, token), token);
             acceptingProgress = false;
+            if (_offlineLibraryPaths.Remove(Path.TrimEndingDirectorySeparator(path)))
+                StartFolderAvailabilityChecks();
             if (version == _scanVersion)
             {
                 ScanInfoTitle = Localize("ScanRefreshingTitle");
@@ -1401,9 +1528,16 @@ public partial class MainViewModel(
             }
             if (!isOnline)
             {
+                _offlineLibraryPaths.Add(Path.TrimEndingDirectorySeparator(path));
+                var offlineNode = FindFolderNodeByPath(FolderTree, path);
+                if (offlineNode is not null)
+                    SetFolderAvailability(offlineNode, false);
+                StartFolderAvailabilityChecks();
                 ReportError(string.Format(Localize("ScanOfflineMessage"), path));
                 return;
             }
+            _offlineLibraryPaths.Remove(Path.TrimEndingDirectorySeparator(path));
+            StartFolderAvailabilityChecks();
             ScanInfoTitle = Localize("ScanRefreshingTitle");
             ScanInfoMessage = string.Format(Localize("ScanRefreshing"), path);
             await RunScanRefreshAsync(() => RefreshTreeAndSelectionAsync(_lifetimeCts.Token), _lifetimeCts.Token);
@@ -1454,6 +1588,18 @@ public partial class MainViewModel(
             ScheduleReload(0);
         }
     }
+
+    private void OnIndexingIssue(string path, string message) => Dispatcher.UIThread.Post(() =>
+    {
+        if (!_disposed)
+            ReportError(string.Format(Localize("ScanFailed"), path, message));
+    });
+
+    private void OnItemsSkipped(string path, int count, string example) => Dispatcher.UIThread.Post(() =>
+    {
+        if (!_disposed)
+            ReportError(string.Format(Localize("ScanSkippedItems"), path, count, example));
+    });
 
     private void OnXnfoIndexingError(string message) => Dispatcher.UIThread.Post(() => ReportError(message));
 
@@ -1606,11 +1752,17 @@ public partial class MainViewModel(
             }
 
             var query = CreateQuery(folderId);
+            if (_isInitializing)
+                await ReportInitialLoadingAsync("InitialLoadingMedia", cancellationToken);
             var files = await Task.Run(() => queries.SearchAllAsync(query, cancellationToken), cancellationToken);
             var sortByFolder = SortFilesByFolder;
+            if (_isInitializing)
+                await ReportInitialLoadingAsync("InitialLoadingSorting", cancellationToken);
             var items = await Task.Run(() => MediaFileHierarchySorter.Sort(files, sortByFolder)
                 .Select(file => new MediaItemViewModel(file))
                 .ToArray(), cancellationToken);
+            if (_isInitializing)
+                await ReportInitialLoadingAsync("InitialLoadingDisplay", cancellationToken);
             _items.ReplaceAll(items);
             if (selectedMediaId is { } mediaId)
             {

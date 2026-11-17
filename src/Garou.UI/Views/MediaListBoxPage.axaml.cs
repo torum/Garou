@@ -115,12 +115,17 @@ public partial class MediaListBoxPage : UserControl
         var path = item.File.Path;
         try
         {
-            var metadata = await viewModel.LoadXnfoAsync(path, CancellationToken.None) ?? new XnfoMetadata();
+            if (!await viewModel.IsMediaAvailableAsync(item.File, viewModel.LifetimeToken))
+                return;
+            var metadata = await viewModel.LoadXnfoAsync(path, viewModel.LifetimeToken) ?? new XnfoMetadata();
             var edited = await XnfoEditorDialog.ShowAsync(owner, path, metadata, _settingsSession.Current.Language);
             if (edited is not null)
             {
                 await viewModel.SaveXnfoAsync(path, edited, CancellationToken.None);
             }
+        }
+        catch (OperationCanceledException) when (viewModel.LifetimeToken.IsCancellationRequested)
+        {
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Xml.XmlException or InvalidOperationException or NotSupportedException)
         {
@@ -162,17 +167,17 @@ public partial class MediaListBoxPage : UserControl
         window.Show(owner);
     }
 
-    private void OnMediaDoubleTapped(object? sender, TappedEventArgs e)
+    private async void OnMediaDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (DataContext is not MainViewModel { SelectedItem: { File: var mediaFile } } viewModel)
         {
             return;
         }
 
-        OpenWithDefaultApplication(mediaFile, viewModel);
+        await OpenWithDefaultApplicationAsync(mediaFile, viewModel);
     }
 
-    private void OnMediaListKeyDown(object? sender, KeyEventArgs e)
+    private async void OnMediaListKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter
             || DataContext is not MainViewModel { SelectedItem: { File: var mediaFile } } viewModel)
@@ -181,26 +186,31 @@ public partial class MediaListBoxPage : UserControl
         }
 
         e.Handled = true;
-        OpenWithDefaultApplication(mediaFile, viewModel);
+        await OpenWithDefaultApplicationAsync(mediaFile, viewModel);
     }
 
-    private void OnOpenWithDefaultApplicationClick(object? sender, RoutedEventArgs e)
+    private async void OnOpenWithDefaultApplicationClick(object? sender, RoutedEventArgs e)
     {
         if (sender is MenuItem { DataContext: MediaItemViewModel { File: var mediaFile } }
             && DataContext is MainViewModel viewModel)
         {
-            OpenWithDefaultApplication(mediaFile, viewModel);
+            await OpenWithDefaultApplicationAsync(mediaFile, viewModel);
         }
     }
 
-    private static void OpenWithDefaultApplication(MediaFile mediaFile, MainViewModel viewModel)
+    private static async Task OpenWithDefaultApplicationAsync(MediaFile mediaFile, MainViewModel viewModel)
     {
         try
         {
+            if (!await viewModel.IsMediaAvailableAsync(mediaFile, viewModel.LifetimeToken))
+                return;
             Process.Start(new ProcessStartInfo(mediaFile.Path)
             {
                 UseShellExecute = true
             });
+        }
+        catch (OperationCanceledException) when (viewModel.LifetimeToken.IsCancellationRequested)
+        {
         }
         catch (Exception exception) when (
             exception is InvalidOperationException or System.ComponentModel.Win32Exception or FileNotFoundException)
@@ -210,17 +220,17 @@ public partial class MediaListBoxPage : UserControl
         }
     }
 
-    private void OnLaunchWithViewerClick(object? sender, RoutedEventArgs e)
+    private async void OnLaunchWithViewerClick(object? sender, RoutedEventArgs e)
     {
-        LaunchWithConfiguredApplication(sender, isEditor: false);
+        await LaunchWithConfiguredApplicationAsync(sender, isEditor: false);
     }
 
-    private void OnLaunchWithEditorClick(object? sender, RoutedEventArgs e)
+    private async void OnLaunchWithEditorClick(object? sender, RoutedEventArgs e)
     {
-        LaunchWithConfiguredApplication(sender, isEditor: true);
+        await LaunchWithConfiguredApplicationAsync(sender, isEditor: true);
     }
 
-    private void LaunchWithConfiguredApplication(object? sender, bool isEditor)
+    private async Task LaunchWithConfiguredApplicationAsync(object? sender, bool isEditor)
     {
         if (sender is not MenuItem { DataContext: MediaItemViewModel { File: var mediaFile } }
             || DataContext is not MainViewModel viewModel)
@@ -250,6 +260,8 @@ public partial class MediaListBoxPage : UserControl
 
         try
         {
+            if (!await viewModel.IsMediaAvailableAsync(mediaFile, viewModel.LifetimeToken))
+                return;
             if (!File.Exists(applicationPath))
             {
                 throw new FileNotFoundException("The configured application was not found.", applicationPath);
@@ -261,6 +273,9 @@ public partial class MediaListBoxPage : UserControl
             };
             startInfo.ArgumentList.Add(mediaFile.Path);
             Process.Start(startInfo);
+        }
+        catch (OperationCanceledException) when (viewModel.LifetimeToken.IsCancellationRequested)
+        {
         }
         catch (Exception exception) when (
             exception is InvalidOperationException

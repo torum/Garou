@@ -125,6 +125,14 @@ public sealed class SlideshowWindow : Window
         _message.Text = _localizer["SlideshowLoading"];
         try
         {
+            var available = await Task.Run(() => File.Exists(file.Path), cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            if (!available)
+            {
+                _message.Text = string.Format(CultureInfo.CurrentCulture, _localizer["SlideshowLoadError"], file.FileName,
+                    string.Format(CultureInfo.CurrentCulture, _localizer["MediaUnavailable"], file.FileName));
+                return;
+            }
             var bitmap = await LoadBitmapAsync(file.Path, cancellation.Token);
             if (_closed || cancellation.IsCancellationRequested)
             {

@@ -33,9 +33,21 @@ public sealed class MainWindowStartupCursorTests
         var viewModel = new MainViewModel(new MediaQueryService(search, null!, folders), null!, new LibraryOperationGate(), settings, session,
             new NoThumbnailGenerator(), null!, folders, null!, new XnfoIndexService(new XnfoStore(), null!), indexer);
         using var services = new ServiceCollection().AddSingleton(session).AddSingleton(viewModel).BuildServiceProvider();
+        var startup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var background = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var databaseShown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var phases = new List<string>();
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.ScanInfoMessage))
+            {
+                phases.Add(viewModel.ScanInfoMessage);
+                if (phases.Count == 1)
+                    databaseShown.TrySetResult();
+            }
+        };
         App.Services = services;
-        App.StartupTask = Task.CompletedTask;
+        App.StartupTask = startup.Task;
         App.BackgroundStartupTask = background.Task;
         var window = new MainWindow(session) { DataContext = viewModel };
         var cursorRestored = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -48,21 +60,41 @@ public sealed class MainWindowStartupCursorTests
         try
         {
             window.Show();
+            await databaseShown.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("Opening the database", viewModel.ScanInfoMessage);
+            Assert.True(viewModel.IsScanInfoOpen);
+            startup.TrySetResult();
+            await folders.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("Loading saved folders", viewModel.ScanInfoMessage);
+            folders.Release.TrySetResult();
             await search.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("Loading saved media", viewModel.ScanInfoMessage);
             Assert.Same(startingCursor, window.Cursor);
             Assert.Single(viewModel.FolderTree);
             Assert.Empty(viewModel.Items);
+            var tree = Assert.IsType<TreeView>(window.FindControl<TreeView>("FolderTreeView"));
+            Assert.Same(viewModel.SelectedFolder, tree.SelectedItem);
 
             search.Release.TrySetResult();
             await cursorRestored.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(viewModel.IsReady);
             Assert.Equal(media.Id, Assert.Single(viewModel.Items).File.Id);
-            var tree = Assert.IsType<TreeView>(window.FindControl<TreeView>("FolderTreeView"));
             Assert.Same(viewModel.SelectedFolder, tree.SelectedItem);
             Assert.False(background.Task.IsCompleted);
+            Assert.False(viewModel.IsScanInfoOpen);
+            Assert.Collection(phases,
+                phase => Assert.Contains("Opening the database", phase),
+                phase => Assert.Contains("Loading saved folders", phase),
+                phase => Assert.Contains("Restoring the selected folder", phase),
+                phase => Assert.Contains("Loading saved media", phase),
+                phase => Assert.Contains("Sorting media", phase),
+                phase => Assert.Contains("Adding media", phase),
+                phase => Assert.Contains("Preparing the window layout", phase));
         }
         finally
         {
+            startup.TrySetResult();
+            folders.Release.TrySetResult();
             search.Release.TrySetResult();
             background.TrySetResult();
             window.Close();
@@ -81,7 +113,14 @@ public sealed class MainWindowStartupCursorTests
 
     private sealed class StartupFolders(Folder folder) : IFolderRepository
     {
-        public Task<IReadOnlyList<Folder>> GetAllAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Folder>>([folder]);
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task<IReadOnlyList<Folder>> GetAllAsync(CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            await Release.Task.WaitAsync(cancellationToken);
+            return [folder];
+        }
         public Task<Folder?> GetByIdAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<Folder?>(folder);
         public Task<Folder?> GetByPathAsync(string path, CancellationToken cancellationToken) => Task.FromResult<Folder?>(folder);
         public Task<Guid> AddAsync(Folder item, CancellationToken cancellationToken) => throw new NotSupportedException();

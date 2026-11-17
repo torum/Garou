@@ -72,7 +72,7 @@
                 <TreeView.ItemTemplate>
                     <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="queries:FolderNode">
                         <Grid ColumnDefinitions="*" Background="Transparent" ToolTip.Tip="{Binding PathText}">
-                            <TextBlock Grid.Column="0" Text="{Binding NameText}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,6,0" />
+                            <TextBlock Grid.Column="0" Text="{Binding NameText}" Opacity="{Binding AvailabilityOpacity}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,6,0" />
                             <Grid.ContextFlyout>
                                 <MenuFlyout Opened="OnMenuFlyoutOpened">
                                     <MenuItem Header="Open folder" Tag="OpenFolder" Click="OnOpenFolderLocationClick" />
