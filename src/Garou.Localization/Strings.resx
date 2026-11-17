@@ -249,7 +249,6 @@
   <data name="InitialLoadingSorting" xml:space="preserve"><value>Sorting media and preparing items...</value></data>
   <data name="InitialLoadingDisplay" xml:space="preserve"><value>Adding media to the library view...</value></data>
   <data name="InitialLoadingLayout" xml:space="preserve"><value>Preparing the window layout and visible thumbnails. A sleeping drive may take time to wake up...</value></data>
-  <data name="ScanOfflineMessage" xml:space="preserve"><value>{0} is unavailable. The app will retry automatically.</value></data>
   <data name="MediaUnavailable" xml:space="preserve"><value>{0} is unavailable. Its drive, folder, or file may be missing.</value></data>
   <data name="FolderAvailabilityError" xml:space="preserve"><value>Could not check folder availability: {0}</value></data>
   <data name="ScanFoundCount" xml:space="preserve"><value>{0} — {1:N0} files found</value></data>

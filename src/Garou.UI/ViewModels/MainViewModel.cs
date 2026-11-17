@@ -1627,7 +1627,6 @@ public partial class MainViewModel(
                 if (offlineNode is not null)
                     SetFolderAvailability(offlineNode, false);
                 StartFolderAvailabilityChecks();
-                ReportError(string.Format(Localize("ScanOfflineMessage"), path));
                 return;
             }
             _offlineLibraryPaths.Remove(Path.TrimEndingDirectorySeparator(path));
@@ -1772,6 +1771,7 @@ public partial class MainViewModel(
                 return;
             }
 
+            StatusText = string.Empty;
             var query = CreateQuery(folderId);
             var sortByFolder = SortFilesByFolder;
             var sortOrder = SelectedMediaSortOption.SortOrder;
@@ -1836,6 +1836,7 @@ public partial class MainViewModel(
         {
             cancellationToken.ThrowIfCancellationRequested();
             Log($"Reload started: folderId={folderId?.ToString() ?? "none"} search='{SearchText}'");
+            StatusText = string.Empty;
             InvalidateVisibleThumbnails();
             var selectedMediaId = SelectedItem?.File.Id;
             foreach (var item in Items)

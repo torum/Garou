@@ -18,6 +18,58 @@ namespace Garou.Tests.Queries;
 public sealed class ScanRefreshMessageTests
 {
     [AvaloniaFact]
+    public async Task AutomaticScanOfUnavailableLibraryDoesNotShowErrorInfoBar()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"Garou-offline-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var unavailablePath = Path.Combine(root, "offline-library");
+        var factory = new SqliteConnectionFactory(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "library.db") }.ToString());
+        using var stop = new CancellationTokenSource();
+        Task? automaticScan = null;
+        try
+        {
+            var ct = TestContext.Current.CancellationToken;
+            await new DatabaseInitializer(factory).InitializeAsync(ct);
+            var folders = new FolderRepository(factory);
+            var libraries = new LibraryRepository(factory);
+            await libraries.AddAsync(new LibraryDefinition { RootPath = unavailablePath, IsEnabled = true }, ct);
+            var excluded = new LibraryExcludedFolderRepository(factory);
+            var media = new MediaFileRepository(factory);
+            var session = new AppSettingsSession();
+            session.Initialize(new AppSettings());
+            var gate = new LibraryOperationGate();
+            var indexer = new MediaIndexerService(new FileWatcherService(), libraries, media, folders, excluded, gate, session, TimeProvider.System);
+            using var viewModel = new MainViewModel(new MediaQueryService(media, media, folders),
+                new LibraryCommands(libraries, excluded, indexer), gate, new SettingsViewModel(session), session,
+                null!, media, folders, null!, new XnfoIndexService(new XnfoStore(), factory), indexer);
+            await viewModel.InitializeAsync(ct);
+
+            var automaticFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            viewModel.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(MainViewModel.IsScanning) && !viewModel.IsScanning)
+                    automaticFinished.TrySetResult();
+            };
+            automaticScan = Task.Run(() => indexer.RunAsync(stop.Token));
+            await automaticFinished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.False(viewModel.IsInfoBarOpen);
+            Assert.Empty(viewModel.InfoBarErrorMessage);
+        }
+        finally
+        {
+            stop.Cancel();
+            if (automaticScan is not null)
+            {
+                try { await automaticScan; }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+            }
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task AutomaticAndManualScansDescribeSelectedViewRatherThanScannedLibrary()
     {
         var root = Path.Combine(Path.GetTempPath(), $"Garou-refresh-{Guid.NewGuid():N}");

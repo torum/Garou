@@ -249,7 +249,6 @@
   <data name="InitialLoadingSorting" xml:space="preserve"><value>メディアを並べ替え、項目を準備しています...</value></data>
   <data name="InitialLoadingDisplay" xml:space="preserve"><value>ライブラリ表示にメディアを追加しています...</value></data>
   <data name="InitialLoadingLayout" xml:space="preserve"><value>ウィンドウのレイアウトと表示するサムネイルを準備しています。スリープ中のドライブの復帰には時間がかかる場合があります...</value></data>
-  <data name="ScanOfflineMessage" xml:space="preserve"><value>{0}にアクセスできません。自動的に再試行します。</value></data>
   <data name="MediaUnavailable" xml:space="preserve"><value>{0}にアクセスできません。ドライブ、フォルダー、またはファイルが見つからない可能性があります。</value></data>
   <data name="FolderAvailabilityError" xml:space="preserve"><value>フォルダーの可用性を確認できません: {0}</value></data>
   <data name="ScanFoundCount" xml:space="preserve"><value>{0} — {1:N0}個のファイルが見つかりました</value></data>
