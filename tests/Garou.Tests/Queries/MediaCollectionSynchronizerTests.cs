@@ -104,6 +104,47 @@ public sealed class MediaCollectionSynchronizerTests
         Assert.Contains(NotifyCollectionChangedAction.Move, notifications);
     }
 
+    [Fact]
+    public void LargeReorderUsesOneResetAndPreservesSurvivingItems()
+    {
+        var files = Enumerable.Range(0, 60_000)
+            .Select(index => CreateFile(Guid.NewGuid(), $"{index}.jpg")).ToArray();
+        var items = new ResettableObservableCollection<MediaItemViewModel>();
+        items.ReplaceAll(files.Select(file => new MediaItemViewModel(file)).ToArray());
+        var original = items.ToDictionary(item => item.File.Id);
+        var removed = files.Take(100).ToArray();
+        var added = Enumerable.Range(0, 100)
+            .Select(index => CreateFile(Guid.NewGuid(), $"new{index}.jpg")).ToArray();
+        var desired = files.Skip(100).Reverse().Concat(added).ToArray();
+        var notifications = new List<NotifyCollectionChangedAction>();
+        items.CollectionChanged += (_, args) => notifications.Add(args.Action);
+
+        MediaCollectionSynchronizer.Apply(items, desired);
+
+        Assert.Equal([NotifyCollectionChangedAction.Reset], notifications);
+        Assert.Equal(desired.Select(file => file.Id), items.Select(item => item.File.Id));
+        Assert.All(items.Take(files.Length - removed.Length), item => Assert.Same(original[item.File.Id], item));
+        Assert.All(removed, file => Assert.DoesNotContain(items, item => item.File.Id == file.Id));
+    }
+
+    [Fact]
+    public void SmallInsertionInLargeCollectionDoesNotReset()
+    {
+        var files = Enumerable.Range(0, 1000)
+            .Select(index => CreateFile(Guid.NewGuid(), $"{index}.jpg")).ToArray();
+        var items = new ResettableObservableCollection<MediaItemViewModel>();
+        items.ReplaceAll(files.Select(file => new MediaItemViewModel(file)).ToArray());
+        var original = items[500];
+        var added = CreateFile(Guid.NewGuid(), "new.jpg");
+        var notifications = new List<NotifyCollectionChangedAction>();
+        items.CollectionChanged += (_, args) => notifications.Add(args.Action);
+
+        MediaCollectionSynchronizer.Apply(items, [added, .. files]);
+
+        Assert.Equal([NotifyCollectionChangedAction.Add], notifications);
+        Assert.Same(original, items[501]);
+    }
+
     private static MediaFile CreateFile(Guid id, string name) => new()
     {
         Id = id,
