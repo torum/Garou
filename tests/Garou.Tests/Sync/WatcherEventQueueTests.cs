@@ -19,7 +19,7 @@ public sealed class WatcherEventQueueTests
             events.Add(change);
 
         var error = Assert.Single(events);
-        Assert.Equal("permission denied", error.WatcherError);
+        Assert.Equal("watch limit reached", error.WatcherError);
         Assert.False(error.RequiresFullRescan);
     }
 

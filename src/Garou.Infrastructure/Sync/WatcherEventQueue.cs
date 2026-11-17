@@ -34,6 +34,12 @@ internal sealed class WatcherEventQueue(string rootPath, int capacity)
         }
 
         System.Diagnostics.Debug.WriteLine($"File monitoring error for '{rootPath}': {exception}");
+        if (exception is UnauthorizedAccessException)
+        {
+            // Inaccessible system folders (e.g. lost+found) are expected and intentionally ignored.
+            return;
+        }
+
         if (Interlocked.Exchange(ref _errorReported, 1) == 0)
         {
             Interlocked.Exchange(ref _pendingError, exception.Message);
