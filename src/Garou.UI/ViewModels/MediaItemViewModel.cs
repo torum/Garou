@@ -22,7 +22,55 @@ public sealed class MediaItemViewModel : ObservableObject, IDisposable
         File = file;
     }
 
-    public MediaFile File { get; }
+    public MediaFile File { get; private set; }
+
+    internal bool UpdateFile(MediaFile file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        if (file.Id != File.Id)
+            throw new ArgumentException("The media file ID must not change.", nameof(file));
+
+        var previous = File;
+        if (MediaFilesEqual(previous, file))
+            return false;
+
+        var thumbnailChanged = previous.Path != file.Path || previous.CoverArt != file.CoverArt || previous.ThumbnailPath != file.ThumbnailPath;
+        File = file;
+        if (thumbnailChanged)
+        {
+            if (_thumbnail is not null)
+            {
+                _thumbnail.PropertyChanged -= OnThumbnailPropertyChanged;
+                _thumbnail.Dispose();
+                _thumbnail = null;
+            }
+            SetThumbnailState(ThumbnailLoadState.Pending);
+            OnPropertyChanged(nameof(Thumbnail));
+            OnPropertyChanged(nameof(IsCoverArtUnavailable));
+        }
+
+        OnPropertyChanged(nameof(File));
+        OnPropertyChanged(nameof(FileName));
+        OnPropertyChanged(nameof(MediaType));
+        OnPropertyChanged(nameof(MediaTypeText));
+        OnPropertyChanged(nameof(ShowsDetailedMetadata));
+        OnPropertyChanged(nameof(ExtensionText));
+        OnPropertyChanged(nameof(FileSizeText));
+        OnPropertyChanged(nameof(HashText));
+        OnPropertyChanged(nameof(CreatedDateText));
+        OnPropertyChanged(nameof(ModifiedDateText));
+        OnPropertyChanged(nameof(LastIndexedDateText));
+        OnPropertyChanged(nameof(FolderIdText));
+        OnPropertyChanged(nameof(ThumbnailPathText));
+        return true;
+    }
+
+    private static bool MediaFilesEqual(MediaFile left, MediaFile right) =>
+        left.Id == right.Id && left.Path == right.Path && left.FileName == right.FileName &&
+        left.Extension == right.Extension && left.MediaType == right.MediaType && left.FileSize == right.FileSize &&
+        left.HashValue == right.HashValue && left.ThumbnailPath == right.ThumbnailPath && left.CoverArt == right.CoverArt &&
+        left.CreatedDateUtc == right.CreatedDateUtc && left.ModifiedDateUtc == right.ModifiedDateUtc &&
+        left.LastIndexedUtc == right.LastIndexedUtc && left.FolderId == right.FolderId;
 
     public ThumbnailImage? Thumbnail
     {

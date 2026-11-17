@@ -38,6 +38,7 @@ public partial class MainWindow : Window
         _wasMaximized = settingsSession.Current.WindowMaximized ?? false;
         
         InitializeComponent();
+        Cursor = new Cursor(StandardCursorType.AppStarting);
 
         Bitmap bitmap = new(AssetLoader.Open(new Uri("avares://Garou/Assets/Garou-24.png")));
         ImageAppIcon.Source = bitmap;
@@ -277,13 +278,39 @@ public partial class MainWindow : Window
             viewModel.FolderRestored += OnFolderRestored;
             Dispatcher.UIThread.Post(() => LoadInitialDataAsync(viewModel), DispatcherPriority.Background);
         }
+        else
+        {
+            Cursor = new Cursor(StandardCursorType.Arrow);
+        }
     }
 
     private async void LoadInitialDataAsync(MainViewModel viewModel)
     {
-        await App.StartupTask;
-        await viewModel.InitializeAsync(CancellationToken.None);
-        MainLayoutGrid.ColumnDefinitions[0].Width = new GridLength(viewModel.LeftPaneWidth);
+        try
+        {
+            viewModel.ShowInitialLoading();
+            await App.StartupTask.WaitAsync(viewModel.LifetimeToken);
+            await viewModel.InitializeAsync(viewModel.LifetimeToken);
+            MainLayoutGrid.ColumnDefinitions[0].Width = new GridLength(viewModel.LeftPaneWidth);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                viewModel.LifetimeToken.ThrowIfCancellationRequested();
+                MainLayoutGrid.UpdateLayout();
+                Cursor = new Cursor(StandardCursorType.Arrow);
+                viewModel.IsScanInfoOpen = false;
+                App.InitialDataReady.TrySetResult();
+            }, DispatcherPriority.Background);
+            await App.BackgroundStartupTask.WaitAsync(viewModel.LifetimeToken);
+        }
+        catch (OperationCanceledException) when (viewModel.LifetimeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Cursor = new Cursor(StandardCursorType.Arrow);
+            viewModel.IsScanInfoOpen = false;
+            viewModel.ReportError(exception.Message);
+        }
     }
 
     private void OnGridSplitterPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -322,8 +349,11 @@ public partial class MainWindow : Window
             }
 
             item.IsExpanded = expandedIds.Contains(node.Folder.Id);
-            item.UpdateLayout();
-            ExpandSaved(item, expandedIds);
+            if (item.IsExpanded)
+            {
+                item.UpdateLayout();
+                ExpandSaved(item, expandedIds);
+            }
         }
     }
 
@@ -485,6 +515,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        await viewModel.AddFolderAsync(path, CancellationToken.None);
+        try
+        {
+            await viewModel.AddFolderAsync(path, viewModel.LifetimeToken);
+        }
+        catch (OperationCanceledException) when (viewModel.LifetimeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            viewModel.ReportError(exception.Message);
+        }
     }
 }

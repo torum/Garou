@@ -14,6 +14,8 @@ namespace Garou
     {
         public static IServiceProvider Services { get; set; } = null!;
         internal static Task StartupTask { get; set; } = Task.CompletedTask;
+        internal static Task BackgroundStartupTask { get; set; } = Task.CompletedTask;
+        internal static TaskCompletionSource InitialDataReady { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public override void Initialize()
         {

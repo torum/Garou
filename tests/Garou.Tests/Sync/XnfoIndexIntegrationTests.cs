@@ -132,7 +132,7 @@ public sealed class XnfoIndexIntegrationTests
             await Assert.ThrowsAsync<InvalidOperationException>(() => index.SyncAsync(unindexedPath, ct));
             var paths = Enumerable.Repeat(unindexedPath, 200).Append(otherMediaPath).ToArray();
             await store.SaveAsync(otherMediaPath, new XnfoMetadata { Title = "Later batch" }, ct);
-            await index.SyncScanAsync(paths, ct);
+            await index.SyncScanAsync(paths, null, ct);
             var laterQuery = new MediaQuery(null, "Later batch", MediaTypeFilter.Any, MediaSortField.Id, false, Guid.Empty, 20);
             Assert.Single(await media.SearchAsync(MediaQueryBuilder.BuildAll(laterQuery), ct));
             Assert.Contains(unindexedPath, index.LastError);

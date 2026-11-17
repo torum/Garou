@@ -241,6 +241,24 @@
   <data name="ErrorTitle" xml:space="preserve">
 	<value>エラー</value>
   </data>
+  <data name="InitialLoadingTitle" xml:space="preserve"><value>ライブラリを読み込んでいます</value></data>
+  <data name="InitialLoadingMessage" xml:space="preserve"><value>データベースを開き、保存されたフォルダーとメディアを読み込んでいます...</value></data>
+  <data name="ScanOfflineMessage" xml:space="preserve"><value>{0}にアクセスできません。自動的に再試行します。</value></data>
+  <data name="ScanFoundCount" xml:space="preserve"><value>{0} — {1:N0}個のファイルが見つかりました</value></data>
+  <data name="ScanTitle" xml:space="preserve"><value>ライブラリをスキャンしています</value></data>
+  <data name="ScanStarting" xml:space="preserve"><value>{0}を準備しています...</value></data>
+  <data name="ScanEnumerating" xml:space="preserve"><value>メディアファイルを検索しています</value></data>
+  <data name="ScanReadingIndex" xml:space="preserve"><value>既存のインデックスを読み込んでいます</value></data>
+  <data name="ScanPreparingFolders" xml:space="preserve"><value>フォルダーを準備しています</value></data>
+  <data name="ScanCheckingFiles" xml:space="preserve"><value>ファイルの変更を確認しています</value></data>
+  <data name="ScanIndexingMedia" xml:space="preserve"><value>メディアをインデックスしています</value></data>
+  <data name="ScanIndexingMetadata" xml:space="preserve"><value>関連メタデータをインデックスしています</value></data>
+  <data name="ScanRemovingStale" xml:space="preserve"><value>古い項目を削除しています</value></data>
+  <data name="ScanRefreshingTitle" xml:space="preserve"><value>ライブラリ表示を更新しています</value></data>
+  <data name="ScanRefreshing" xml:space="preserve"><value>{0}のフォルダーとメディアを読み込んでいます...</value></data>
+  <data name="ScanCount" xml:space="preserve"><value>{0} — {1:N0} / {2:N0}</value></data>
+  <data name="ScanBusy" xml:space="preserve"><value>現在のライブラリ処理が終了するまでお待ちください。</value></data>
+  <data name="ScanFailed" xml:space="preserve"><value>{0}のスキャンまたは更新に失敗しました: {1}</value></data>
   <data name="ExcludedFoldersLabel" xml:space="preserve"><value>除外されたフォルダー</value></data>
   <data name="ExcludedFoldersDescription" xml:space="preserve"><value>フォルダーを復元すると、関連するライブラリを再スキャンします。他の除外フォルダーやスキャン設定は引き続き適用されます。</value></data>
   <data name="RestoreFolderLabel" xml:space="preserve"><value>復元</value></data>

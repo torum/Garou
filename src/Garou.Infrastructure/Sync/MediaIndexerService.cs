@@ -24,6 +24,10 @@ public sealed class MediaIndexerService(
     private const int BatchSize = 200;
     private static readonly TimeSpan OfflineRetryInterval = TimeSpan.FromSeconds(30);
 
+    public event Action<string>? AutomaticScanStarted;
+    public event Action<ScanProgress>? AutomaticScanProgress;
+    public event Action<string, bool, Exception?>? AutomaticScanFinished;
+
     internal Func<string, IEnumerable<string>> EnumerateDirectoryEntries { get; set; } =
         path => Directory.EnumerateFileSystemEntries(path);
 
@@ -42,7 +46,10 @@ public sealed class MediaIndexerService(
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            await ScanAsync(library, null, cancellationToken).ConfigureAwait(false);
+            using (await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await RunAutomaticScanAsync(library, clearSuppressedPaths: true, cancellationToken).ConfigureAwait(false);
+            }
             if (!library.IsOnline)
             {
                 await Task.Delay(OfflineRetryInterval, timeProvider, cancellationToken).ConfigureAwait(false);
@@ -60,6 +67,32 @@ public sealed class MediaIndexerService(
     {
         using var operation = await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false);
         await ScanCoreAsync(library, progress, clearSuppressedPaths: true, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RunAutomaticScanAsync(LibraryDefinition library, bool clearSuppressedPaths, CancellationToken cancellationToken, Func<Task>? afterScan = null)
+    {
+        AutomaticScanStarted?.Invoke(library.RootPath);
+        Exception? error = null;
+        try
+        {
+            await ScanCoreAsync(library, new AutomaticProgress(this), clearSuppressedPaths, cancellationToken).ConfigureAwait(false);
+            if (afterScan is not null)
+                await afterScan().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            error = exception;
+            throw;
+        }
+        finally
+        {
+            AutomaticScanFinished?.Invoke(library.RootPath, library.IsOnline, error);
+        }
+    }
+
+    private sealed class AutomaticProgress(MediaIndexerService owner) : IProgress<ScanProgress>
+    {
+        public void Report(ScanProgress value) => owner.AutomaticScanProgress?.Invoke(value);
     }
 
     private async Task ScanCoreAsync(
@@ -84,11 +117,12 @@ public sealed class MediaIndexerService(
             return;
         }
 
-        progress?.Report(new ScanProgress("Enumerating files", 0, 0));
+        progress?.Report(new ScanProgress("ScanEnumerating", 0, 0));
         var excludedPaths = await excludedFolders.GetPathsAsync(library.Id, cancellationToken).ConfigureAwait(false);
         var files = new List<string>();
         var unreadableDirectories = new List<string>();
         var pendingDirectories = new Stack<string>();
+        var enumerationTimestamp = timeProvider.GetTimestamp();
         pendingDirectories.Push(library.RootPath);
         while (pendingDirectories.TryPop(out var directory))
         {
@@ -113,6 +147,12 @@ public sealed class MediaIndexerService(
                     else if (IsSupported(Path.GetExtension(path)))
                     {
                         files.Add(path);
+                        var now = timeProvider.GetTimestamp();
+                        if (timeProvider.GetElapsedTime(enumerationTimestamp, now) >= TimeSpan.FromMilliseconds(200))
+                        {
+                            enumerationTimestamp = now;
+                            progress?.Report(new ScanProgress("ScanEnumerating", files.Count, 0));
+                        }
                     }
                 }
             }
@@ -128,8 +168,10 @@ public sealed class MediaIndexerService(
             }
         }
 
+        progress?.Report(new ScanProgress("ScanReadingIndex", 0, 0));
         var known = await mediaFiles.GetSignaturesUnderRootAsync(library.RootPath, cancellationToken).ConfigureAwait(false);
 
+        progress?.Report(new ScanProgress("ScanPreparingFolders", 0, 0));
         var folderIds = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         await EnsureFolderAsync(library.RootPath, library.RootPath, folderIds, cancellationToken).ConfigureAwait(false);
         foreach (var directory in files.Select(Path.GetDirectoryName).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
@@ -137,10 +179,14 @@ public sealed class MediaIndexerService(
             await EnsureFolderAsync(directory, library.RootPath, folderIds, cancellationToken).ConfigureAwait(false);
         }
 
+        progress?.Report(new ScanProgress("ScanCheckingFiles", 0, 0));
         var changed = new List<string>();
         var uninspectableFiles = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+        var checkedCount = 0;
+        var checkTimestamp = timeProvider.GetTimestamp();
         foreach (var path in files)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 if (IsChanged(path, known))
@@ -153,7 +199,15 @@ public sealed class MediaIndexerService(
                 System.Diagnostics.Debug.WriteLine($"Could not inspect media file '{path}': {exception.Message}");
                 uninspectableFiles.TryAdd(path, 0);
             }
+            checkedCount++;
+            var now = timeProvider.GetTimestamp();
+            if (checkedCount == files.Count || timeProvider.GetElapsedTime(checkTimestamp, now) >= TimeSpan.FromMilliseconds(200))
+            {
+                checkTimestamp = now;
+                progress?.Report(new ScanProgress("ScanCheckingFiles", checkedCount, files.Count));
+            }
         }
+        progress?.Report(new ScanProgress("ScanIndexingMedia", 0, changed.Count));
         var processed = 0;
         var progressLock = new object();
         var lastReportedTimestamp = timeProvider.GetTimestamp();
@@ -177,7 +231,7 @@ public sealed class MediaIndexerService(
                 lastReportedTimestamp = now;
             }
 
-            progress?.Report(new ScanProgress("Indexing media", done, changed.Count));
+            progress?.Report(new ScanProgress("ScanIndexingMedia", done, changed.Count));
         }
 
         async Task ProcessChangedFilesAsync()
@@ -261,10 +315,12 @@ public sealed class MediaIndexerService(
 
         if (xnfoIndex is not null)
         {
+            progress?.Report(new ScanProgress("ScanIndexingMetadata", 0, 0));
             var inspectableFiles = files.Where(path => !uninspectableFiles.ContainsKey(path) && !IsUnderUnreadableDirectory(path)).ToList();
-            await xnfoIndex.SyncScanAsync(inspectableFiles, cancellationToken).ConfigureAwait(false);
+            await xnfoIndex.SyncScanAsync(inspectableFiles, progress, cancellationToken).ConfigureAwait(false);
         }
 
+        progress?.Report(new ScanProgress("ScanRemovingStale", 0, 0));
         var seen = files.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var stale = known.Keys.Where(path => !seen.Contains(path) && !IsUnderUnreadableDirectory(path));
 
@@ -290,7 +346,7 @@ public sealed class MediaIndexerService(
 
         if (change.RequiresFullRescan)
         {
-            await ScanCoreAsync(library, null, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
+            await RunAutomaticScanAsync(library, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -314,8 +370,8 @@ public sealed class MediaIndexerService(
             case FileChangeKind.Deleted:
                 if (await folders.GetByPathAsync(change.FullPath, cancellationToken).ConfigureAwait(false) is not null)
                 {
-                    await ScanCoreAsync(library, null, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
-                    await RemoveMissingFolderAsync(change.FullPath, cancellationToken).ConfigureAwait(false);
+                    await RunAutomaticScanAsync(library, clearSuppressedPaths: false, cancellationToken,
+                        () => RemoveMissingFolderAsync(change.FullPath, cancellationToken)).ConfigureAwait(false);
                 }
                 else
                 {
@@ -332,8 +388,8 @@ public sealed class MediaIndexerService(
                         var newPath = Path.Combine(change.FullPath, Path.GetRelativePath(change.OldFullPath, oldPath));
                         await MoveFileAsync(library, oldPath, newPath, cancellationToken).ConfigureAwait(false);
                     }
-                    await ScanCoreAsync(library, null, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
-                    await RemoveMissingFolderAsync(change.OldFullPath, cancellationToken).ConfigureAwait(false);
+                    await RunAutomaticScanAsync(library, clearSuppressedPaths: false, cancellationToken,
+                        () => RemoveMissingFolderAsync(change.OldFullPath, cancellationToken)).ConfigureAwait(false);
                 }
                 else if (File.Exists(change.FullPath))
                 {
@@ -343,7 +399,7 @@ public sealed class MediaIndexerService(
             default:
                 if (Directory.Exists(change.FullPath))
                 {
-                    await ScanCoreAsync(library, null, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
+                    await RunAutomaticScanAsync(library, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {

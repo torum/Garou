@@ -22,6 +22,7 @@
   <ItemGroup>
     <Folder Include="Behaviors\" />
     <AvaloniaResource Include="Assets\**" />
+    <InternalsVisibleTo Include="Garou.Tests" />
   </ItemGroup>
 
   <ItemGroup>

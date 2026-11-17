@@ -400,6 +400,57 @@ public sealed class SyncTests
     }
 
     [Fact]
+    public async Task WhenAutomaticScansRunThenLifecycleAndProgressAreReported()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"automatic-scan-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        using var stop = new CancellationTokenSource();
+        var library = new LibraryDefinition { RootPath = root, IsEnabled = true };
+        var watcher = new ScriptedWatcher(() => { },
+            [new FileChangeEvent { LibraryRoot = root, FullPath = root, RequiresFullRescan = true }], stop);
+        var service = CreateService(new FakeMediaFileRepository(), watcher, library);
+        var events = new List<string>();
+        service.AutomaticScanStarted += path => events.Add($"start:{path}");
+        service.AutomaticScanProgress += progress => events.Add(progress.Phase);
+        service.AutomaticScanFinished += (path, online, error) => events.Add($"finish:{path}:{online}:{error is null}");
+
+        try
+        {
+            await service.RunAsync(stop.Token);
+            Assert.Equal(2, events.Count(value => value == $"start:{root}"));
+            Assert.Equal(2, events.Count(value => value == "ScanEnumerating"));
+            Assert.Equal(2, events.Count(value => value == $"finish:{root}:True:True"));
+            Assert.Equal($"start:{root}", events[0]);
+            Assert.Equal($"finish:{root}:True:True", events[^1]);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenAutomaticLibraryIsUnavailableThenCompletionReportsOffline()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"missing-automatic-{Guid.NewGuid():N}");
+        using var stop = new CancellationTokenSource();
+        var library = new LibraryDefinition { RootPath = root, IsEnabled = true };
+        var service = CreateService(new FakeMediaFileRepository(), new NoopWatcher(), library);
+        (string Path, bool Online, Exception? Error)? result = null;
+        service.AutomaticScanFinished += (path, online, error) =>
+        {
+            result = (path, online, error);
+            stop.Cancel();
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.RunAsync(stop.Token));
+        Assert.NotNull(result);
+        Assert.Equal(root, result.Value.Path);
+        Assert.False(result.Value.Online);
+        Assert.Null(result.Value.Error);
+    }
+
+    [Fact]
     public async Task WhenAudioFileIsScannedThenItIsIndexedAsAudio()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -443,6 +494,12 @@ public sealed class SyncTests
 
             Assert.Equal([200, 200, 5], repository.UpsertBatchSizes);
             Assert.True(progress.Reports.Count < 405);
+            Assert.Equal("ScanEnumerating", progress.Reports[0].Phase);
+            Assert.Contains(progress.Reports, report => report.Phase == "ScanReadingIndex");
+            Assert.Contains(progress.Reports, report => report.Phase == "ScanPreparingFolders");
+            Assert.Contains(progress.Reports, report => report.Phase == "ScanCheckingFiles");
+            Assert.Contains(progress.Reports, report => report.Phase == "ScanIndexingMedia" && report.Processed == 405 && report.Total == 405);
+            Assert.Equal("ScanRemovingStale", progress.Reports[^1].Phase);
         }
         finally
         {

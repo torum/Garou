@@ -29,10 +29,11 @@ namespace Garou
 
             var hostedServices = services.GetServices<IHostedService>().ToList();
             using var lifetime = new CancellationTokenSource();
-            App.StartupTask = Task.Run(async () =>
+            App.StartupTask = Task.Run(() => services.GetRequiredService<DatabaseInitializer>().InitializeAsync(lifetime.Token), lifetime.Token);
+            App.BackgroundStartupTask = Task.Run(async () =>
             {
-                await services.GetRequiredService<DatabaseInitializer>().InitializeAsync(lifetime.Token);
-
+                await App.StartupTask;
+                await App.InitialDataReady.Task.WaitAsync(lifetime.Token);
                 foreach (var hostedService in hostedServices)
                 {
                     System.Diagnostics.Debug.WriteLine($"Garou.UI starting hosted service: {hostedService.GetType().Name}");
@@ -49,7 +50,14 @@ namespace Garou
                 lifetime.Cancel();
                 try
                 {
-                    App.StartupTask.GetAwaiter().GetResult();
+                    App.BackgroundStartupTask.GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+                {
+                }
+                catch (Exception exception)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Garou.UI background startup failed: {exception}");
                 }
                 finally
                 {

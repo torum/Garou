@@ -38,11 +38,13 @@ public sealed class XnfoIndexService(XnfoStore store, SqliteConnectionFactory co
         IndexingError?.Invoke(message);
     }
 
-    internal async Task SyncScanAsync(IReadOnlyList<string> mediaPaths, CancellationToken cancellationToken)
+    internal async Task SyncScanAsync(IReadOnlyList<string> mediaPaths, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
     {
         if (mediaPaths.Count == 0)
             return;
 
+        var processed = 0;
+        var lastReported = System.Diagnostics.Stopwatch.GetTimestamp();
         await using var connection = await connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
         foreach (var paths in mediaPaths.Chunk(ScanBatchSize))
         {
@@ -72,6 +74,13 @@ public sealed class XnfoIndexService(XnfoStore store, SqliteConnectionFactory co
                 }
             }
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            processed += paths.Length;
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (processed == mediaPaths.Count || System.Diagnostics.Stopwatch.GetElapsedTime(lastReported, now) >= TimeSpan.FromMilliseconds(200))
+            {
+                lastReported = now;
+                progress?.Report(new ScanProgress("ScanIndexingMetadata", processed, mediaPaths.Count));
+            }
         }
     }
 

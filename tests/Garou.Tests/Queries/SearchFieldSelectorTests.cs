@@ -17,7 +17,7 @@ public sealed class SearchFieldSelectorTests
         var previousServices = App.Services;
         var session = new AppSettingsSession();
         var settings = new SettingsViewModel(session);
-        var viewModel = new MainViewModel(null!, null!, null!, settings, session, null!, null!, null!, null!, null!);
+        var viewModel = new MainViewModel(null!, null!, null!, settings, session, null!, null!, null!, null!, null!, null!);
         using var services = new ServiceCollection()
             .AddSingleton(session)
             .AddSingleton(viewModel)

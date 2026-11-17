@@ -137,6 +137,10 @@ public sealed class LibraryCommands(
     {
         var library = await FindAsync(id, cancellationToken).ConfigureAwait(false);
         await scanner.ScanAsync(library, progress, cancellationToken).ConfigureAwait(false);
+        if (!library.IsOnline)
+        {
+            throw new DirectoryNotFoundException($"Library '{library.RootPath}' is not accessible.");
+        }
     }
 
     public async Task<bool> IsLibraryRootAsync(string rootPath, CancellationToken cancellationToken)

@@ -54,13 +54,14 @@ public sealed class MediaQueryService(
     public async Task<IReadOnlyList<FolderNode>> GetFolderTreeAsync(CancellationToken cancellationToken)
     {
         var all = await folders.GetAllAsync(cancellationToken).ConfigureAwait(false);
+        var folderIds = all.Select(folder => folder.Id).ToHashSet();
         var childrenByParent = all
             .Where(folder => folder.ParentId is not null)
             .GroupBy(folder => folder.ParentId!.Value)
             .ToDictionary(group => group.Key, group => group.ToList());
 
         return all
-            .Where(folder => folder.ParentId is null || !all.Any(parent => parent.Id == folder.ParentId))
+            .Where(folder => folder.ParentId is null || !folderIds.Contains(folder.ParentId.Value))
             .OrderBy(folder => folder.Path, LogicalFileNameComparer.Instance)
             .ThenBy(folder => folder.Path, StringComparer.Ordinal)
             .Select(folder => BuildNode(folder, childrenByParent, isRoot: true))

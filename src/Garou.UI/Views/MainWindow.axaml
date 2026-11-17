@@ -51,7 +51,7 @@
                     <!-- PaneHeader Buttons -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <!-- AddFolder button -->
-                        <Button Width="39" Height="36" Margin="6,0,6,0" Click="OnAddFolderClick" WindowDecorationProperties.ElementRole="User" HorizontalAlignment="Right" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" Padding="3" Opacity="0.7" Focusable="False">
+                        <Button Width="39" Height="36" Margin="6,0,6,0" Click="OnAddFolderClick" IsEnabled="{Binding IsReady}" WindowDecorationProperties.ElementRole="User" HorizontalAlignment="Right" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" Padding="3" Opacity="0.7" Focusable="False">
                             <Viewbox Width="14" Height="14">
                                 <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource FolderAddIcon}"></PathIcon>
                             </Viewbox>
@@ -108,7 +108,10 @@
 
         <!-- Error Infobar -->
 		<Grid Grid.Row="1" Grid.ColumnSpan="3">
-			<ui:FAInfoBar Title="{Binding InfoBarErrorTitle}" IsOpen="{Binding IsInfoBarOpen, Mode=TwoWay}" IsIconVisible="True" IsClosable="True" Severity="Error" Message="{Binding InfoBarErrorMessage}" />
+            <StackPanel>
+				<ui:FAInfoBar Title="{Binding ScanInfoTitle}" IsOpen="{Binding IsScanInfoOpen, Mode=TwoWay}" IsIconVisible="True" IsClosable="True" Severity="Informational" Message="{Binding ScanInfoMessage}" />
+				<ui:FAInfoBar Title="{Binding InfoBarErrorTitle}" IsOpen="{Binding IsInfoBarOpen, Mode=TwoWay}" IsIconVisible="True" IsClosable="True" Severity="Error" Message="{Binding InfoBarErrorMessage}" />
+            </StackPanel>
 		</Grid>
 
         <!-- Status Bar -->
@@ -116,11 +119,7 @@
             <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Opacity="0.7" Margin="4" />
         </Grid>
         <Grid Grid.Row="2" Grid.Column="2" ColumnDefinitions="*,Auto">
-            <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto" Margin="8,0,0,0">
-                <TextBlock Grid.Column="0" Text="{Binding ThumbnailStatusText}" VerticalAlignment="Center" Margin="4" Opacity="0.7" />
-                <TextBlock Grid.Column="1" Text="{Binding ScanStatusText}" VerticalAlignment="Center" IsVisible="{Binding IsScanning}" Margin="4" Opacity="0.7"/>
-            </Grid>
-            <ProgressBar Grid.Column="1" Width="200" Margin="4,0,0,0" Minimum="0" Maximum="100" Value="{Binding ScanProgressPercent}" IsVisible="{Binding IsScanning}" />
+            <TextBlock Grid.Column="0" Text="{Binding ThumbnailStatusText}" VerticalAlignment="Center" Margin="12,4,0,4" Opacity="0.7" />
         </Grid>
         <Border Grid.Row="2" Grid.ColumnSpan="3" Margin="0" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"/>
 
