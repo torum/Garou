@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Garou.Application.Libraries;
 using Garou.Domain.Abstractions;
@@ -22,6 +23,9 @@ public sealed class MediaIndexerService(
 {
     private const int BatchSize = 200;
     private static readonly TimeSpan OfflineRetryInterval = TimeSpan.FromSeconds(30);
+
+    internal Func<string, IEnumerable<string>> EnumerateDirectoryEntries { get; set; } =
+        path => Directory.EnumerateFileSystemEntries(path);
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -81,13 +85,48 @@ public sealed class MediaIndexerService(
         }
 
         progress?.Report(new ScanProgress("Enumerating files", 0, 0));
-        var searchOption = settingsSession.Current.ScanSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
         var excludedPaths = await excludedFolders.GetPathsAsync(library.Id, cancellationToken).ConfigureAwait(false);
-        var files = Directory.EnumerateFiles(library.RootPath, "*", searchOption)
-            .Where(path => IsSupported(Path.GetExtension(path))
-                && !IsExcluded(path, excludedPaths)
-                && (clearSuppressedPaths || !operationGate.IsPathSuppressed(path)))
-            .ToList();
+        var files = new List<string>();
+        var unreadableDirectories = new List<string>();
+        var pendingDirectories = new Stack<string>();
+        pendingDirectories.Push(library.RootPath);
+        while (pendingDirectories.TryPop(out var directory))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                foreach (var path in EnumerateDirectoryEntries(directory))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (IsExcluded(path, excludedPaths) || (!clearSuppressedPaths && operationGate.IsPathSuppressed(path)))
+                    {
+                        continue;
+                    }
+
+                    if ((File.GetAttributes(path) & FileAttributes.Directory) != 0)
+                    {
+                        if (settingsSession.Current.ScanSubfolders)
+                        {
+                            pendingDirectories.Push(path);
+                        }
+                    }
+                    else if (IsSupported(Path.GetExtension(path)))
+                    {
+                        files.Add(path);
+                    }
+                }
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Could not enumerate folder '{directory}': {exception.Message}");
+                unreadableDirectories.Add(directory);
+                if (string.Equals(directory, library.RootPath, StringComparison.Ordinal))
+                {
+                    library.IsOnline = false;
+                    return;
+                }
+            }
+        }
 
         var known = await mediaFiles.GetSignaturesUnderRootAsync(library.RootPath, cancellationToken).ConfigureAwait(false);
 
@@ -98,7 +137,23 @@ public sealed class MediaIndexerService(
             await EnsureFolderAsync(directory, library.RootPath, folderIds, cancellationToken).ConfigureAwait(false);
         }
 
-        var changed = files.Where(path => IsChanged(path, known)).ToList();
+        var changed = new List<string>();
+        var uninspectableFiles = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in files)
+        {
+            try
+            {
+                if (IsChanged(path, known))
+                {
+                    changed.Add(path);
+                }
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Could not inspect media file '{path}': {exception.Message}");
+                uninspectableFiles.TryAdd(path, 0);
+            }
+        }
         var processed = 0;
         var progressLock = new object();
         var lastReportedTimestamp = timeProvider.GetTimestamp();
@@ -138,10 +193,24 @@ public sealed class MediaIndexerService(
                     },
                     async (path, ct) =>
                     {
-                        var mediaFile = await BuildMediaFileAsync(path, folderIds[Path.GetDirectoryName(path)!], ct).ConfigureAwait(false);
+                        MediaFile? mediaFile;
+                        try
+                        {
+                            mediaFile = await BuildMediaFileAsync(path, folderIds[Path.GetDirectoryName(path)!], ct).ConfigureAwait(false);
+                        }
+                        catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Could not inspect media file '{path}': {exception.Message}");
+                            mediaFile = null;
+                        }
+
                         if (mediaFile is not null)
                         {
                             await channel.Writer.WriteAsync(mediaFile, ct).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            uninspectableFiles.TryAdd(path, 0);
                         }
 
                         ReportProgress(Interlocked.Increment(ref processed));
@@ -187,13 +256,17 @@ public sealed class MediaIndexerService(
             throw;
         }
 
+        bool IsUnderUnreadableDirectory(string path) =>
+            unreadableDirectories.Any(directory => IsSameOrDescendant(directory, path));
+
         if (xnfoIndex is not null)
         {
-            await xnfoIndex.SyncScanAsync(files, cancellationToken).ConfigureAwait(false);
+            var inspectableFiles = files.Where(path => !uninspectableFiles.ContainsKey(path) && !IsUnderUnreadableDirectory(path)).ToList();
+            await xnfoIndex.SyncScanAsync(inspectableFiles, cancellationToken).ConfigureAwait(false);
         }
 
         var seen = files.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var stale = known.Keys.Where(path => !seen.Contains(path));
+        var stale = known.Keys.Where(path => !seen.Contains(path) && !IsUnderUnreadableDirectory(path));
 
         foreach (var path in stale)
         {

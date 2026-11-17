@@ -451,6 +451,73 @@ public sealed class SyncTests
     }
 
     [Fact]
+    public async Task WhenFolderEnumerationIsDeniedThenReadableFoldersAreScannedAndUnreadableRecordsArePreserved()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"unreadable-scan-{Guid.NewGuid():N}");
+        var unreadable = Path.Combine(root, "unreadable");
+        var readable = Path.Combine(root, "readable");
+        Directory.CreateDirectory(unreadable);
+        Directory.CreateDirectory(readable);
+        var readableFile = Path.Combine(readable, "photo.jpg");
+        var retainedFile = Path.Combine(unreadable, "nested", "retained.jpg");
+        var staleFile = Path.Combine(readable, "removed.jpg");
+        var siblingStaleFile = Path.Combine(root, "unreadable-other", "removed.jpg");
+        var partialEntry = Path.Combine(unreadable, "notes.txt");
+        await File.WriteAllBytesAsync(readableFile, [1, 2, 3], cancellationToken);
+        await File.WriteAllTextAsync(partialEntry, "not media", cancellationToken);
+        var repository = new FakeMediaFileRepository();
+        repository.StoredPaths.AddRange([retainedFile, staleFile, siblingStaleFile]);
+        var service = CreateScanService(repository);
+        service.EnumerateDirectoryEntries = path => path == unreadable
+            ? DeniedEntries(partialEntry)
+            : Directory.EnumerateFileSystemEntries(path);
+
+        try
+        {
+            await service.ScanAsync(new LibraryDefinition { RootPath = root }, null, cancellationToken);
+
+            Assert.Equal(readableFile, Assert.Single(repository.Upserted).Path);
+            Assert.Equal([staleFile, siblingStaleFile], repository.DeletedPaths);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        static IEnumerable<string> DeniedEntries(string partialEntry)
+        {
+            yield return partialEntry;
+            throw new UnauthorizedAccessException("Permission denied");
+        }
+    }
+
+    [Fact]
+    public async Task WhenRootEnumerationIsDeniedThenLibraryIsOfflineAndRecordsArePreserved()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"unreadable-root-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var repository = new FakeMediaFileRepository();
+        repository.StoredPaths.Add(Path.Combine(root, "retained.jpg"));
+        var service = CreateScanService(repository);
+        service.EnumerateDirectoryEntries = _ => throw new UnauthorizedAccessException("Permission denied");
+        var library = new LibraryDefinition { RootPath = root };
+
+        try
+        {
+            await service.ScanAsync(library, null, TestContext.Current.CancellationToken);
+
+            Assert.False(library.IsOnline);
+            Assert.Empty(repository.DeletedPaths);
+            Assert.Empty(repository.Upserted);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task WhenInitialScanRunsThenNoRecordsAreDeleted()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
