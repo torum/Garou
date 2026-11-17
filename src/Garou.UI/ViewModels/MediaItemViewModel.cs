@@ -32,8 +32,9 @@ public sealed class MediaItemViewModel : ObservableObject, IDisposable
             {
                 var coverPath = ResolveCoverPath();
                 var thumbnailPath = File.ThumbnailPath;
-                var imagePath = coverPath is not null && System.IO.File.Exists(coverPath) ? coverPath : thumbnailPath;
-                if (imagePath is not null && System.IO.File.Exists(imagePath))
+                var coverExists = coverPath is not null && System.IO.File.Exists(coverPath);
+                var imagePath = coverExists ? coverPath : thumbnailPath;
+                if (imagePath is not null && (coverExists || System.IO.File.Exists(imagePath)))
                 {
                     _thumbnail = new ThumbnailImage(imagePath, imagePath == coverPath ? thumbnailPath : null);
                     _thumbnail.PropertyChanged += OnThumbnailPropertyChanged;

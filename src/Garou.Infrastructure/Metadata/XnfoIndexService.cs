@@ -2,11 +2,13 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Garou.Domain.Models;
 using Garou.Infrastructure.Persistence;
+using Microsoft.Data.Sqlite;
 
 namespace Garou.Infrastructure.Metadata;
 
 public sealed class XnfoIndexService(XnfoStore store, SqliteConnectionFactory connectionFactory)
 {
+    private const int ScanBatchSize = 200;
     private static readonly XnfoJsonContext JsonContext = new(new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
     private string? _lastError;
 
@@ -24,10 +26,52 @@ public sealed class XnfoIndexService(XnfoStore store, SqliteConnectionFactory co
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Xml.XmlException or InvalidOperationException or NotSupportedException)
         {
-            var message = $"Could not index metadata for '{mediaPath}': {exception.Message}";
-            Volatile.Write(ref _lastError, message);
-            System.Diagnostics.Debug.WriteLine(message);
-            IndexingError?.Invoke(message);
+            ReportIndexingError(mediaPath, exception);
+        }
+    }
+
+    private void ReportIndexingError(string mediaPath, Exception exception)
+    {
+        var message = $"Could not index metadata for '{mediaPath}': {exception.Message}";
+        Volatile.Write(ref _lastError, message);
+        System.Diagnostics.Debug.WriteLine(message);
+        IndexingError?.Invoke(message);
+    }
+
+    internal async Task SyncScanAsync(IReadOnlyList<string> mediaPaths, CancellationToken cancellationToken)
+    {
+        if (mediaPaths.Count == 0)
+            return;
+
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var paths in mediaPaths.Chunk(ScanBatchSize))
+        {
+            var loaded = new List<(string Path, XnfoMetadata? Metadata)>(paths.Length);
+            foreach (var path in paths)
+            {
+                try
+                {
+                    loaded.Add((path, await store.LoadAsync(path, cancellationToken).ConfigureAwait(false)));
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Xml.XmlException or InvalidOperationException or NotSupportedException)
+                {
+                    ReportIndexingError(path, exception);
+                }
+            }
+
+            await using var transaction = connection.BeginTransaction();
+            foreach (var (path, metadata) in loaded)
+            {
+                try
+                {
+                    await SyncMetadataAsync(connection, transaction, path, metadata, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Xml.XmlException or InvalidOperationException or NotSupportedException)
+                {
+                    ReportIndexingError(path, exception);
+                }
+            }
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -50,15 +94,22 @@ public sealed class XnfoIndexService(XnfoStore store, SqliteConnectionFactory co
     public async Task SyncAsync(string mediaPath, CancellationToken cancellationToken)
     {
         var metadata = await store.LoadAsync(mediaPath, cancellationToken).ConfigureAwait(false);
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await SyncMetadataAsync(connection, null, mediaPath, metadata, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task SyncMetadataAsync(SqliteConnection connection, SqliteTransaction? transaction,
+        string mediaPath, XnfoMetadata? metadata, CancellationToken cancellationToken)
+    {
         if (metadata is null)
         {
-            await connectionFactory.ExecuteNonQueryAsync(
+            await ExecuteAsync(connection, transaction,
                 "DELETE FROM XnfoMetadata WHERE MediaFileId = (SELECT Id FROM MediaFile WHERE Path = $path);",
                 cancellationToken, ("$path", mediaPath)).ConfigureAwait(false);
             return;
         }
 
-        var rows = await connectionFactory.ExecuteNonQueryAsync(
+        var rows = await ExecuteAsync(connection, transaction,
             """
             INSERT INTO XnfoMetadata (MediaFileId, Title, Subtitle, SortTitle, Publisher, StudioLabel, ReleaseDate,
                 Performers, Countries, Tags, Genres, Categories, ContentRating, Description, Comments, CoverArt)
@@ -70,7 +121,12 @@ public sealed class XnfoIndexService(XnfoStore store, SqliteConnectionFactory co
                 Publisher = excluded.Publisher, StudioLabel = excluded.StudioLabel, ReleaseDate = excluded.ReleaseDate,
                 Performers = excluded.Performers, Countries = excluded.Countries, Tags = excluded.Tags,
                 Genres = excluded.Genres, Categories = excluded.Categories, ContentRating = excluded.ContentRating,
-                Description = excluded.Description, Comments = excluded.Comments, CoverArt = excluded.CoverArt;
+                Description = excluded.Description, Comments = excluded.Comments, CoverArt = excluded.CoverArt
+            WHERE (Title, Subtitle, SortTitle, Publisher, StudioLabel, ReleaseDate, Performers, Countries, Tags,
+                   Genres, Categories, ContentRating, Description, Comments, CoverArt)
+               IS NOT (excluded.Title, excluded.Subtitle, excluded.SortTitle, excluded.Publisher, excluded.StudioLabel,
+                   excluded.ReleaseDate, excluded.Performers, excluded.Countries, excluded.Tags, excluded.Genres,
+                   excluded.Categories, excluded.ContentRating, excluded.Description, excluded.Comments, excluded.CoverArt);
             """, cancellationToken,
             ("$path", mediaPath), ("$title", metadata.Title), ("$subtitle", metadata.Subtitle),
             ("$sortTitle", metadata.SortTitle), ("$publisher", metadata.Publisher), ("$studioLabel", metadata.StudioLabel),
@@ -81,7 +137,23 @@ public sealed class XnfoIndexService(XnfoStore store, SqliteConnectionFactory co
             ("$comments", metadata.Comments), ("$coverArt", metadata.CoverArt)).ConfigureAwait(false);
         if (rows == 0)
         {
-            throw new InvalidOperationException($"The media file '{mediaPath}' is not indexed.");
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT 1 FROM MediaFile WHERE Path = $path;";
+            command.AddValue("$path", mediaPath);
+            if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is null)
+                throw new InvalidOperationException($"The media file '{mediaPath}' is not indexed.");
         }
+    }
+
+    private static async Task<int> ExecuteAsync(SqliteConnection connection, SqliteTransaction? transaction,
+        string sql, CancellationToken cancellationToken, params (string Name, object? Value)[] parameters)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = sql;
+        foreach (var (name, value) in parameters)
+            command.AddValue(name, value);
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 }

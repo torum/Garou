@@ -189,10 +189,7 @@ public sealed class MediaIndexerService(
 
         if (xnfoIndex is not null)
         {
-            foreach (var path in files)
-            {
-                await xnfoIndex.SyncObservedAsync(path, notifyChange: false, cancellationToken).ConfigureAwait(false);
-            }
+            await xnfoIndex.SyncScanAsync(files, cancellationToken).ConfigureAwait(false);
         }
 
         var seen = files.ToHashSet(StringComparer.OrdinalIgnoreCase);
