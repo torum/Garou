@@ -24,6 +24,7 @@ public sealed class MainWindowStartupCursorTests
         var previousStartup = App.StartupTask;
         var previousBackground = App.BackgroundStartupTask;
         var session = new AppSettingsSession();
+        session.Initialize(new Garou.Domain.Models.AppSettings { MediaSortOrder = MediaListSortOrder.DateModified });
         var settings = new SettingsViewModel(session);
         var folder = new Folder { Path = Path.Combine(Path.GetTempPath(), "startup-library") };
         var media = new MediaFile { FolderId = folder.Id, Path = Path.Combine(folder.Path, "photo.jpg"), FileName = "photo.jpg", Extension = ".jpg", MediaType = MediaType.Image };
@@ -79,6 +80,8 @@ public sealed class MainWindowStartupCursorTests
             await cursorRestored.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(viewModel.IsReady);
             Assert.Equal(media.Id, Assert.Single(viewModel.Items).File.Id);
+            Assert.Equal(MediaListSortOrder.DateModified, viewModel.SelectedMediaSortOption.SortOrder);
+            Assert.Equal(MediaListSortOrder.DateModified, session.Current.MediaSortOrder);
             Assert.Same(viewModel.SelectedFolder, tree.SelectedItem);
             Assert.False(background.Task.IsCompleted);
             Assert.False(viewModel.IsScanInfoOpen);

@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Garou.Application.Libraries;
 using Garou.Application.Queries;
 using Garou.Domain.Entities;
+using Garou.Domain.Enums;
 using Garou.Domain.Models;
 using Garou.Domain.Abstractions;
 using Garou.Infrastructure.Metadata;
@@ -32,6 +33,7 @@ public partial class MainViewModel(
 {
     private const int SearchDebounceMilliseconds = 300;
     private const int ThumbnailRegenerationDelayMilliseconds = 300;
+    private const int FolderAvailabilityBatchSize = 128;
     private const double MinThumbnailSize = 80;
     private const double MaxThumbnailSize = 320;
     private const int SmallThumbnailSize = 200;
@@ -53,6 +55,8 @@ public partial class MainViewModel(
     private bool _includeImages = true;
     private bool _includeVideos = true;
     private bool _includeAudio = true;
+    private bool _isSortDescending;
+    private MediaSortOption _selectedMediaSortOption = settings.MediaSortOptions[0];
     private readonly ResettableObservableCollection<MediaItemViewModel> _items = new();
     private IReadOnlyList<MediaFile> _visibleThumbnailFiles = [];
     private readonly object _thumbnailRegenerationLock = new();
@@ -352,6 +356,34 @@ public partial class MainViewModel(
 
     [ObservableProperty]
     public partial SearchFieldOption SelectedSearchField { get; set; } = settings.SearchFieldOptions[0];
+
+    public MediaSortOption SelectedMediaSortOption
+    {
+        get => _selectedMediaSortOption;
+        set
+        {
+            if (SetProperty(ref _selectedMediaSortOption, value))
+            {
+                UpdateSettingsSession();
+                if (!_isInitializing)
+                {
+                    ScheduleReload(0);
+                }
+            }
+        }
+    }
+
+    public bool IsSortDescending
+    {
+        get => _isSortDescending;
+        set
+        {
+            if (SetProperty(ref _isSortDescending, value) && !_isInitializing)
+            {
+                ScheduleReload(0);
+            }
+        }
+    }
 
     [ObservableProperty]
     public partial FolderNode? SelectedFolder { get; set; }
@@ -687,6 +719,7 @@ public partial class MainViewModel(
         ShowFileNames = appSettings.ShowFileNames;
         ShowFileTypeBadges = appSettings.ShowFileTypeBadges;
         SortFilesByFolder = appSettings.SortFilesByFolder;
+        SelectedMediaSortOption = Settings.MediaSortOptions.Single(option => option.SortOrder == appSettings.MediaSortOrder);
         IncludeDescendants = appSettings.IncludeDescendants;
         IncludeImages = appSettings.IncludeImages;
         IncludeVideos = appSettings.IncludeVideos;
@@ -1111,45 +1144,75 @@ public partial class MainViewModel(
         StartFolderAvailabilityChecks();
     }
 
+    internal Func<string, bool> FolderExists { get; set; } = Directory.Exists;
+
     private void StartFolderAvailabilityChecks()
     {
         _folderAvailabilityCts?.Cancel();
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
         _folderAvailabilityCts = cancellation;
         var roots = FolderTree.ToArray();
-        _ = CheckFolderAvailabilityAsync(roots, cancellation);
+        var offlinePaths = new HashSet<string>(_offlineLibraryPaths, _offlineLibraryPaths.Comparer);
+        _ = CheckFolderAvailabilityAsync(roots, offlinePaths, cancellation);
     }
 
-    private async Task CheckFolderAvailabilityAsync(IReadOnlyList<FolderNode> roots, CancellationTokenSource cancellation)
+    private async Task CheckFolderAvailabilityAsync(IReadOnlyList<FolderNode> roots, HashSet<string> offlinePaths, CancellationTokenSource cancellation)
     {
         try
         {
-            async Task CheckNodeAsync(FolderNode node, bool parentAvailable, bool retryOnly)
-            {
-                cancellation.Token.ThrowIfCancellationRequested();
-                var available = parentAvailable && !_offlineLibraryPaths.Contains(Path.TrimEndingDirectorySeparator(node.PathText)) &&
-                    (retryOnly && node.IsAvailable == true ||
-                    await Task.Run(() => Directory.Exists(node.PathText), cancellation.Token));
-                cancellation.Token.ThrowIfCancellationRequested();
-                var wasUnavailable = node.IsAvailable == false;
-                node.IsAvailable = available;
-                if (available && wasUnavailable)
-                    RequestVisibleThumbnailRegeneration();
-                foreach (var child in node.Children)
-                    await CheckNodeAsync(child, available, retryOnly);
-            }
-
             async Task CheckRootAsync(FolderNode root)
             {
                 try
                 {
-                    var retryOnly = false;
-                    while (true)
+                    await Task.Run(async () =>
                     {
-                        await CheckNodeAsync(root, true, retryOnly);
-                        retryOnly = true;
-                        await Task.Delay(TimeSpan.FromSeconds(30), cancellation.Token);
-                    }
+                        var availableNodes = new HashSet<FolderNode>();
+                        var pending = new List<(FolderNode Node, bool Available)>();
+                        async Task FlushAsync()
+                        {
+                            if (pending.Count == 0)
+                                return;
+                            var updates = pending.ToArray();
+                            pending.Clear();
+                            await Dispatcher.UIThread.InvokeAsync(() =>
+                            {
+                                cancellation.Token.ThrowIfCancellationRequested();
+                                var recovered = false;
+                                foreach (var (node, available) in updates)
+                                {
+                                    recovered |= available && node.IsAvailable == false;
+                                    node.IsAvailable = available;
+                                }
+                                if (recovered)
+                                    RequestVisibleThumbnailRegeneration();
+                            }, DispatcherPriority.Background);
+                        }
+
+                        async Task CheckNodeAsync(FolderNode node, bool parentAvailable, bool retryOnly)
+                        {
+                            cancellation.Token.ThrowIfCancellationRequested();
+                            var available = parentAvailable && !offlinePaths.Contains(Path.TrimEndingDirectorySeparator(node.PathText)) &&
+                                (retryOnly && availableNodes.Contains(node) || FolderExists(node.PathText));
+                            if (available)
+                                availableNodes.Add(node);
+                            else
+                                availableNodes.Remove(node);
+                            pending.Add((node, available));
+                            if (pending.Count >= FolderAvailabilityBatchSize)
+                                await FlushAsync().ConfigureAwait(false);
+                            foreach (var child in node.Children)
+                                await CheckNodeAsync(child, available, retryOnly).ConfigureAwait(false);
+                        }
+
+                        var retryOnly = false;
+                        while (true)
+                        {
+                            await CheckNodeAsync(root, true, retryOnly).ConfigureAwait(false);
+                            await FlushAsync().ConfigureAwait(false);
+                            retryOnly = true;
+                            await Task.Delay(TimeSpan.FromSeconds(30), cancellation.Token).ConfigureAwait(false);
+                        }
+                    }, cancellation.Token);
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {
@@ -1686,6 +1749,7 @@ public partial class MainViewModel(
         appSettings.ShowFileNames = ShowFileNames;
         appSettings.ShowFileTypeBadges = ShowFileTypeBadges;
         appSettings.SortFilesByFolder = SortFilesByFolder;
+        appSettings.MediaSortOrder = SelectedMediaSortOption.SortOrder;
         appSettings.IncludeDescendants = IncludeDescendants;
         appSettings.IncludeImages = IncludeImages;
         appSettings.IncludeVideos = IncludeVideos;
@@ -1710,14 +1774,16 @@ public partial class MainViewModel(
 
             var query = CreateQuery(folderId);
             var sortByFolder = SortFilesByFolder;
+            var sortOrder = SelectedMediaSortOption.SortOrder;
+            var sortDescending = IsSortDescending;
             var originalThumbnails = Items.ToDictionary(item => item.File.Id, item => item.File.ThumbnailPath);
             var files = await Task.Run(async () =>
             {
                 var result = await queries.SearchAllAsync(query, cancellationToken).ConfigureAwait(false);
-                return MediaFileHierarchySorter.Sort(result, sortByFolder).ToArray();
+                return SortMediaFiles(result, sortOrder, sortByFolder, sortDescending);
             }, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            if (_selectedFolderId != folderId || query != CreateQuery(_selectedFolderId) || sortByFolder != SortFilesByFolder)
+            if (_selectedFolderId != folderId || query != CreateQuery(_selectedFolderId) || sortByFolder != SortFilesByFolder || sortOrder != SelectedMediaSortOption.SortOrder || sortDescending != IsSortDescending)
                 return;
 
             var currentThumbnails = Items.ToDictionary(item => item.File.Id, item => item.File.ThumbnailPath);
@@ -1785,13 +1851,15 @@ public partial class MainViewModel(
             }
 
             var query = CreateQuery(folderId);
+            var sortByFolder = SortFilesByFolder;
+            var sortOrder = SelectedMediaSortOption.SortOrder;
+            var sortDescending = IsSortDescending;
             if (_isInitializing)
                 await ReportInitialLoadingAsync("InitialLoadingMedia", cancellationToken);
             var files = await Task.Run(() => queries.SearchAllAsync(query, cancellationToken), cancellationToken);
-            var sortByFolder = SortFilesByFolder;
             if (_isInitializing)
                 await ReportInitialLoadingAsync("InitialLoadingSorting", cancellationToken);
-            var items = await Task.Run(() => MediaFileHierarchySorter.Sort(files, sortByFolder)
+            var items = await Task.Run(() => SortMediaFiles(files, sortOrder, sortByFolder, sortDescending)
                 .Select(file => new MediaItemViewModel(file))
                 .ToArray(), cancellationToken);
             if (_isInitializing)
@@ -1829,6 +1897,75 @@ public partial class MainViewModel(
 
     private static int CountDescendantFolders(IEnumerable<FolderNode> nodes) =>
         nodes.Sum(node => 1 + CountDescendantFolders(node.Children));
+
+    private static MediaFile[] SortMediaFiles(
+        IEnumerable<MediaFile> files,
+        MediaListSortOrder sortOrder,
+        bool sortByFolder,
+        bool descending)
+    {
+        var orderedFiles = sortOrder switch
+        {
+            MediaListSortOrder.None => files.ToArray(),
+            MediaListSortOrder.FileName => MediaFileHierarchySorter.Sort(files, sortByFolder).ToArray(),
+            MediaListSortOrder.FileSize => SortByFileSize(files, descending),
+            MediaListSortOrder.FileType => SortByFileType(files, descending),
+            MediaListSortOrder.DateModified => SortByModifiedDate(files, descending),
+            MediaListSortOrder.FileExtension => SortByExtension(files, descending),
+            _ => throw new ArgumentOutOfRangeException(nameof(sortOrder), sortOrder, "Unknown media sort order.")
+        };
+
+        return descending && sortOrder == MediaListSortOrder.FileName
+            ? orderedFiles.Reverse().ToArray()
+            : orderedFiles;
+    }
+
+    private static MediaFile[] SortByFileSize(IEnumerable<MediaFile> files, bool descending)
+    {
+        var ordered = files.OrderBy(file => file.FileSize is null);
+        ordered = descending
+            ? ordered.ThenByDescending(file => file.FileSize)
+            : ordered.ThenBy(file => file.FileSize);
+        return ordered.ThenBy(file => file.FileName, LogicalFileNameComparer.Instance)
+            .ThenBy(file => file.Id)
+            .ToArray();
+    }
+
+    private static MediaFile[] SortByFileType(IEnumerable<MediaFile> files, bool descending) => files
+        .OrderBy(file => file.MediaType is Garou.Domain.Enums.MediaType.Unknown)
+        .ThenBy(file => GetMediaTypeSortKey(file.MediaType), descending ? Comparer<int>.Create((left, right) => right.CompareTo(left)) : Comparer<int>.Default)
+        .ThenBy(file => file.FileName, LogicalFileNameComparer.Instance)
+        .ThenBy(file => file.Id)
+        .ToArray();
+
+    private static int GetMediaTypeSortKey(Garou.Domain.Enums.MediaType mediaType) => mediaType switch
+    {
+        Garou.Domain.Enums.MediaType.Image => 0,
+        Garou.Domain.Enums.MediaType.Video => 1,
+        Garou.Domain.Enums.MediaType.Audio => 2,
+        _ => 3
+    };
+
+    private static MediaFile[] SortByModifiedDate(IEnumerable<MediaFile> files, bool descending)
+    {
+        var ordered = files.OrderBy(file => file.ModifiedDateUtc is null);
+        ordered = descending
+            ? ordered.ThenByDescending(file => file.ModifiedDateUtc)
+            : ordered.ThenBy(file => file.ModifiedDateUtc);
+        return ordered.ThenBy(file => file.FileName, LogicalFileNameComparer.Instance)
+            .ThenBy(file => file.Id)
+            .ToArray();
+    }
+
+    private static MediaFile[] SortByExtension(IEnumerable<MediaFile> files, bool descending)
+    {
+        var ordered = descending
+            ? files.OrderByDescending(file => file.Extension, StringComparer.OrdinalIgnoreCase)
+            : files.OrderBy(file => file.Extension, StringComparer.OrdinalIgnoreCase);
+        return ordered.ThenBy(file => file.FileName, LogicalFileNameComparer.Instance)
+            .ThenBy(file => file.Id)
+            .ToArray();
+    }
 
     private MediaQuery CreateQuery(Guid? folderId) => new(
         FolderId: folderId,

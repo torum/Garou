@@ -76,6 +76,48 @@ public sealed class FolderAvailabilityTests
     }
 
     [AvaloniaFact]
+    public async Task LargeTreeChecksRunOffUiThreadAndApplyInBatches()
+    {
+        var root = new Folder { Path = Path.Combine(Path.GetTempPath(), "availability-batch") };
+        var children = Enumerable.Range(0, 140)
+            .Select(index => new Folder { ParentId = root.Id, Path = Path.Combine(root.Path, index.ToString()) })
+            .ToArray();
+        using var viewModel = CreateViewModel([root, .. children], new RecordingMetadata());
+        using var release = new ManualResetEventSlim();
+        var reachedProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var checkedOnUiThread = false;
+        viewModel.FolderExists = _ =>
+        {
+            checkedOnUiThread |= Avalonia.Threading.Dispatcher.UIThread.CheckAccess();
+            if (Interlocked.Increment(ref calls) == 64)
+            {
+                reachedProbe.TrySetResult();
+                release.Wait(TimeSpan.FromSeconds(10));
+            }
+            return true;
+        };
+
+        try
+        {
+            await viewModel.LoadFolderTreeAsync(CancellationToken.None);
+            await reachedProbe.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var rootNode = Assert.Single(viewModel.FolderTree);
+            Assert.Null(rootNode.IsAvailable);
+            Assert.False(checkedOnUiThread);
+            release.Set();
+            await WaitForAvailabilityAsync(rootNode.Children[^1], true);
+            Assert.True(rootNode.IsAvailable);
+            Assert.All(rootNode.Children, node => Assert.True(node.IsAvailable));
+            Assert.Equal(141, calls);
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task RebuildingTreeChecksAReconnectedFolder()
     {
         var path = Path.Combine(Path.GetTempPath(), $"Garou-reconnected-{Guid.NewGuid():N}");

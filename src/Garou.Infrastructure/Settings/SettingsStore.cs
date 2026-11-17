@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Xml.Linq;
+using Garou.Domain.Enums;
 using Garou.Domain.Models;
 
 namespace Garou.Infrastructure.Settings;
@@ -71,6 +72,9 @@ public sealed class SettingsStore(string settingsFilePath)
                 SortFilesByFolder = bool.TryParse(root?.Element("SortFilesByFolder")?.Value, out var sortFilesByFolder)
                     ? sortFilesByFolder
                     : new AppSettings().SortFilesByFolder,
+                MediaSortOrder = Enum.TryParse<MediaListSortOrder>(root?.Element("MediaSortOrder")?.Value, out var mediaSortOrder) && Enum.IsDefined(mediaSortOrder)
+                    ? mediaSortOrder
+                    : new AppSettings().MediaSortOrder,
                 IncludeDescendants = bool.TryParse(root?.Element("IncludeDescendants")?.Value, out var includeDescendants)
                     ? includeDescendants
                     : new AppSettings().IncludeDescendants,
@@ -141,6 +145,7 @@ public sealed class SettingsStore(string settingsFilePath)
                     new XElement("ShowFileNames", settings.ShowFileNames.ToString(CultureInfo.InvariantCulture)),
                     new XElement("ShowFileTypeBadges", settings.ShowFileTypeBadges.ToString(CultureInfo.InvariantCulture)),
                     new XElement("SortFilesByFolder", settings.SortFilesByFolder.ToString(CultureInfo.InvariantCulture)),
+                    new XElement("MediaSortOrder", settings.MediaSortOrder.ToString()),
                     new XElement("IncludeDescendants", settings.IncludeDescendants.ToString(CultureInfo.InvariantCulture)),
                     new XElement("IncludeImages", settings.IncludeImages.ToString(CultureInfo.InvariantCulture)),
                     new XElement("IncludeVideos", settings.IncludeVideos.ToString(CultureInfo.InvariantCulture)),

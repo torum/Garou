@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Garou.Application.Queries;
+using Garou.Domain.Enums;
 using Garou.Infrastructure.Settings;
 using Garou.UI.Views;
 using Garou.ViewModels;
@@ -11,6 +12,18 @@ namespace Garou.Tests.Queries;
 [Collection("Avalonia UI")]
 public sealed class SearchFieldSelectorTests
 {
+    [AvaloniaFact]
+    public void SortSelectionUpdatesTheSettingsSession()
+    {
+        var session = new AppSettingsSession();
+        var settings = new SettingsViewModel(session);
+        using var viewModel = new MainViewModel(null!, null!, null!, settings, session, null!, null!, null!, null!, null!, null!);
+
+        viewModel.SelectedMediaSortOption = settings.MediaSortOptions.Single(option => option.SortOrder == MediaListSortOrder.FileExtension);
+
+        Assert.Equal(MediaListSortOrder.FileExtension, session.Current.MediaSortOrder);
+    }
+
     [AvaloniaFact]
     public async Task SelectorDefaultsToAllAndRetainsSelectionWhenLanguageChanges()
     {

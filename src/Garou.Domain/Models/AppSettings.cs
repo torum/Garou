@@ -1,3 +1,5 @@
+using Garou.Domain.Enums;
+
 namespace Garou.Domain.Models;
 
 public sealed class AppSettings
@@ -27,6 +29,8 @@ public sealed class AppSettings
     public bool ShowFileTypeBadges { get; set; } = true;
 
     public bool SortFilesByFolder { get; set; }
+
+    public MediaListSortOrder MediaSortOrder { get; set; } = MediaListSortOrder.None;
 
     public bool IncludeDescendants { get; set; } = true;
 

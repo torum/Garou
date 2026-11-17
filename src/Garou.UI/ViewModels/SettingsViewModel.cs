@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Garou.Application.Queries;
+using Garou.Domain.Enums;
 using Garou.Domain.Models;
 using Garou.Localization;
 using Garou.Infrastructure.Settings;
@@ -35,6 +36,9 @@ public partial class SettingsViewModel : ObservableObject
         SearchFieldOptions = Enum.GetValues<MediaSearchField>()
             .Select(field => new SearchFieldOption(field, _localizer[$"SearchField{field}"]))
             .ToArray();
+        MediaSortOptions = Enum.GetValues<MediaListSortOrder>()
+            .Select(sortOrder => new MediaSortOption(sortOrder, _localizer[$"MediaSort{sortOrder}"]))
+            .ToArray();
         Extensions = new ObservableCollection<ExtensionPreferenceViewModel>(
             MediaFileExtensions.All.Select(extension => new ExtensionPreferenceViewModel(extension, true)));
         foreach (var extension in Extensions)
@@ -52,6 +56,8 @@ public partial class SettingsViewModel : ObservableObject
     public IReadOnlyList<string> SupportedLanguages { get; } = ["en", "ja"];
 
     public IReadOnlyList<SearchFieldOption> SearchFieldOptions { get; }
+
+    public IReadOnlyList<MediaSortOption> MediaSortOptions { get; }
 
     public ObservableCollection<ExtensionPreferenceViewModel> Extensions { get; }
 
@@ -72,7 +78,14 @@ public partial class SettingsViewModel : ObservableObject
         {
             option.Label = _localizer[$"SearchField{option.Field}"];
         }
+        foreach (var option in MediaSortOptions)
+        {
+            option.Label = _localizer[$"MediaSort{option.SortOrder}"];
+        }
         OnPropertyChanged(nameof(SearchFieldLabel));
+        OnPropertyChanged(nameof(SortFieldLabel));
+        OnPropertyChanged(nameof(SortDirectionLabel));
+        OnPropertyChanged(nameof(SortDescendingLabel));
         OnPropertyChanged(nameof(SearchMediaLabel));
         OnPropertyChanged(nameof(SettingsTitle));
         OnPropertyChanged(nameof(ErrorTitle));
@@ -110,6 +123,12 @@ public partial class SettingsViewModel : ObservableObject
     public string ErrorTitle => _localizer["ErrorTitle"];
 
     public string SearchFieldLabel => _localizer["SearchFieldLabel"];
+
+    public string SortFieldLabel => _localizer["SortFieldLabel"];
+
+    public string SortDirectionLabel => _localizer["SortDirectionLabel"];
+
+    public string SortDescendingLabel => _localizer["SortDescendingLabel"];
 
     public string SearchMediaLabel => _localizer["SearchMediaLabel"];
 

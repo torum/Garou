@@ -287,6 +287,15 @@
   <data name="SlideshowLoadError" xml:space="preserve"><value>{0}を表示できません: {1}</value></data>
   <data name="CoverUnavailable" xml:space="preserve"><value>カバー画像を表示できません</value></data>
   <data name="SearchFieldLabel" xml:space="preserve"><value>検索対象</value></data>
+  <data name="SortFieldLabel" xml:space="preserve"><value>並べ替え</value></data>
+  <data name="MediaSortNone" xml:space="preserve"><value>なし</value></data>
+  <data name="MediaSortFileName" xml:space="preserve"><value>ファイル名</value></data>
+  <data name="MediaSortFileSize" xml:space="preserve"><value>ファイルサイズ</value></data>
+  <data name="MediaSortFileType" xml:space="preserve"><value>ファイルの種類</value></data>
+  <data name="MediaSortDateModified" xml:space="preserve"><value>更新日時</value></data>
+  <data name="MediaSortFileExtension" xml:space="preserve"><value>拡張子</value></data>
+  <data name="SortDirectionLabel" xml:space="preserve"><value>並べ替え順</value></data>
+  <data name="SortDescendingLabel" xml:space="preserve"><value>降順</value></data>
   <data name="SearchMediaLabel" xml:space="preserve"><value>メディアを検索</value></data>
   <data name="SearchFieldAll" xml:space="preserve"><value>すべて</value></data>
   <data name="SearchFieldFileName" xml:space="preserve"><value>ファイル名</value></data>

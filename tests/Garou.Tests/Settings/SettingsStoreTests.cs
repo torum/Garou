@@ -1,5 +1,6 @@
 using System.Globalization;
 using Garou.Application.Queries;
+using Garou.Domain.Enums;
 using Garou.Domain.Models;
 using Garou.Infrastructure.Settings;
 using Garou.Localization;
@@ -217,6 +218,37 @@ public sealed class SettingsStoreTests : IDisposable
         var loaded = await store.LoadAsync(CancellationToken.None);
 
         Assert.False(loaded.SortFilesByFolder);
+    }
+
+    [Theory]
+    [InlineData(MediaListSortOrder.None)]
+    [InlineData(MediaListSortOrder.FileName)]
+    [InlineData(MediaListSortOrder.FileSize)]
+    [InlineData(MediaListSortOrder.FileType)]
+    [InlineData(MediaListSortOrder.DateModified)]
+    [InlineData(MediaListSortOrder.FileExtension)]
+    public async Task WhenMediaSortOrderIsSavedThenItIsRestored(MediaListSortOrder sortOrder)
+    {
+        var store = new SettingsStore(_settingsPath);
+        await store.SaveAsync(new AppSettings { MediaSortOrder = sortOrder }, CancellationToken.None);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(sortOrder, loaded.MediaSortOrder);
+    }
+
+    [Theory]
+    [InlineData("<Settings />")]
+    [InlineData("<Settings><MediaSortOrder>Invalid</MediaSortOrder></Settings>")]
+    [InlineData("<Settings><MediaSortOrder>999</MediaSortOrder></Settings>")]
+    public async Task WhenMediaSortOrderIsMissingOrInvalidThenNoneIsUsed(string xml)
+    {
+        await File.WriteAllTextAsync(_settingsPath, xml, TestContext.Current.CancellationToken);
+        var store = new SettingsStore(_settingsPath);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(MediaListSortOrder.None, loaded.MediaSortOrder);
     }
 
     [Fact]
