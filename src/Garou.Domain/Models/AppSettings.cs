@@ -32,7 +32,7 @@ public sealed class AppSettings
 
     public MediaListSortOrder MediaSortOrder { get; set; } = MediaListSortOrder.None;
 
-    public bool IncludeDescendants { get; set; } = true;
+    public bool IncludeDescendants { get; set; }
 
     public bool IncludeImages { get; set; } = true;
 

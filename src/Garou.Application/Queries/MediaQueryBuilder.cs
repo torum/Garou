@@ -47,7 +47,7 @@ public sealed record MediaQuery(
     bool Descending,
     Guid AfterId,
     int PageSize,
-    bool IncludeDescendants = true,
+    bool IncludeDescendants = false,
     MediaSearchField SearchField = MediaSearchField.All);
 
 public sealed record BuiltQuery(string Sql, IReadOnlyDictionary<string, object?> Parameters);

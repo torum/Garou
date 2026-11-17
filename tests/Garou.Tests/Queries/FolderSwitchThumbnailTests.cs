@@ -66,6 +66,34 @@ public sealed class FolderSwitchThumbnailTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task SwitchingFoldersCancelsPreviousResultPreparation()
+    {
+        var firstFolder = new Folder { Path = Path.Combine(Path.GetTempPath(), "first") };
+        var secondFolder = new Folder { Path = Path.Combine(Path.GetTempPath(), "second") };
+        var first = CreateMedia(firstFolder.Id, "first.jpg");
+        var second = CreateMedia(secondFolder.Id, "second.jpg");
+        using var search = new GatedSortRepository(first, second);
+        var session = new AppSettingsSession();
+        using var viewModel = new MainViewModel(new MediaQueryService(search, null!, null!), null!, null!,
+            new SettingsViewModel(session), session, null!, null!, null!, null!, null!, null!);
+        try
+        {
+            viewModel.SelectedFolder = new FolderNode(firstFolder, [], true);
+            await search.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            viewModel.SelectedFolder = new FolderNode(secondFolder, [], true);
+            search.Release();
+            await WaitForItemAsync(viewModel, second.Id);
+
+            Assert.Equal(second.Id, Assert.Single(viewModel.Items).File.Id);
+            Assert.False(viewModel.IsInfoBarOpen, viewModel.InfoBarErrorMessage);
+        }
+        finally
+        {
+            search.Release();
+        }
+    }
+
     private static MediaFile CreateMedia(Guid folderId, string name) => new()
     {
         FolderId = folderId, Path = name, FileName = name, Extension = ".jpg", MediaType = MediaType.Image
@@ -114,6 +142,38 @@ public sealed class FolderSwitchThumbnailTests
             return id == first.FolderId!.Value.ToString("N") ? [first] : [];
         }
         public Task<long> CountAsync(BuiltQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class GatedSortRepository(MediaFile first, MediaFile second) : IMediaSearchRepository, IDisposable
+    {
+        private readonly ManualResetEventSlim _release = new();
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<IReadOnlyList<MediaFile>> SearchAsync(BuiltQuery query, CancellationToken cancellationToken)
+        {
+            var id = (string)query.Parameters["$folderId"]!;
+            return Task.FromResult<IReadOnlyList<MediaFile>>(id == first.FolderId!.Value.ToString("N")
+                ? new GatedFiles(first, Started, _release)
+                : [second]);
+        }
+
+        public Task<long> CountAsync(BuiltQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public void Release() => _release.Set();
+        public void Dispose() => _release.Dispose();
+    }
+
+    private sealed class GatedFiles(MediaFile file, TaskCompletionSource started, ManualResetEventSlim release) : IReadOnlyList<MediaFile>
+    {
+        public int Count => 1;
+        public MediaFile this[int index] => index == 0 ? file : throw new ArgumentOutOfRangeException(nameof(index));
+        public IEnumerator<MediaFile> GetEnumerator()
+        {
+            started.TrySetResult();
+            if (!release.Wait(TimeSpan.FromSeconds(10)))
+                throw new TimeoutException("The test did not release result preparation.");
+            yield return file;
+        }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private sealed class GatedGenerator : IThumbnailGeneratorService

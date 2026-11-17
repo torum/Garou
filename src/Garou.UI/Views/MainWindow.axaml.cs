@@ -27,6 +27,10 @@ public partial class MainWindow : Window
     private double _normalHeight;
     private PixelPoint _normalPosition;
     private bool _wasMaximized;
+    private bool _startupCursorActive = true;
+    private MainViewModel? _cursorViewModel;
+    private readonly Cursor _startingCursor;
+    private readonly Cursor _arrowCursor;
 
     public MainWindow() : this(App.Services.GetRequiredService<AppSettingsSession>())
     {
@@ -38,7 +42,9 @@ public partial class MainWindow : Window
         _wasMaximized = settingsSession.Current.WindowMaximized ?? false;
         
         InitializeComponent();
-        Cursor = new Cursor(StandardCursorType.AppStarting);
+        _startingCursor = new Cursor(StandardCursorType.AppStarting);
+        _arrowCursor = new Cursor(StandardCursorType.Arrow);
+        Cursor = _startingCursor;
 
         Bitmap bitmap = new(AssetLoader.Open(new Uri("avares://Garou/Assets/Garou-24.png")));
         ImageAppIcon.Source = bitmap;
@@ -148,6 +154,12 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        if (_cursorViewModel is not null)
+        {
+            _cursorViewModel.PropertyChanged -= OnCursorViewModelPropertyChanged;
+            _cursorViewModel = null;
+        }
+
         if (DataContext is MainViewModel disposableViewModel)
         {
             disposableViewModel.Dispose();
@@ -275,13 +287,29 @@ public partial class MainWindow : Window
 
         if (DataContext is MainViewModel viewModel)
         {
+            _cursorViewModel = viewModel;
+            viewModel.PropertyChanged += OnCursorViewModelPropertyChanged;
             viewModel.FolderRestored += OnFolderRestored;
             Dispatcher.UIThread.Post(() => LoadInitialDataAsync(viewModel), DispatcherPriority.Background);
         }
         else
         {
-            Cursor = new Cursor(StandardCursorType.Arrow);
+            _startupCursorActive = false;
+            UpdateCursor();
         }
+    }
+
+    private void OnCursorViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsMediaLoading) && !_startupCursorActive)
+            UpdateCursor();
+    }
+
+    private void UpdateCursor()
+    {
+        Cursor = _startupCursorActive || _cursorViewModel?.IsMediaLoading == true
+            ? _startingCursor
+            : _arrowCursor;
     }
 
     private async void LoadInitialDataAsync(MainViewModel viewModel)
@@ -297,7 +325,8 @@ public partial class MainWindow : Window
             {
                 viewModel.LifetimeToken.ThrowIfCancellationRequested();
                 MainLayoutGrid.UpdateLayout();
-                Cursor = new Cursor(StandardCursorType.Arrow);
+                _startupCursorActive = false;
+                UpdateCursor();
                 viewModel.IsScanInfoOpen = false;
                 App.InitialDataReady.TrySetResult();
             }, DispatcherPriority.Background);
@@ -308,7 +337,8 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            Cursor = new Cursor(StandardCursorType.Arrow);
+            _startupCursorActive = false;
+            UpdateCursor();
             viewModel.IsScanInfoOpen = false;
             viewModel.ReportError(exception.Message);
         }

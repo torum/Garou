@@ -46,6 +46,7 @@ public partial class MainViewModel(
     private readonly SemaphoreSlim _scanRefreshSemaphore = new(1, 1);
     private Guid? _selectedFolderId;
     private CancellationTokenSource? _reloadCts;
+    private CancellationTokenSource? _mediaRefreshCts;
     private CancellationTokenSource? _selectedMetadataCts;
     private CancellationTokenSource? _folderAvailabilityCts;
     private bool _isInitializing;
@@ -57,7 +58,7 @@ public partial class MainViewModel(
     private bool _includeAudio = true;
     private bool _isSortDescending;
     private MediaSortOption _selectedMediaSortOption = settings.MediaSortOptions[0];
-    private readonly ResettableObservableCollection<MediaItemViewModel> _items = new();
+    private readonly MediaItemCollection _items = new();
     private IReadOnlyList<MediaFile> _visibleThumbnailFiles = [];
     private readonly object _thumbnailRegenerationLock = new();
     private CancellationTokenSource? _thumbnailGenerationCts;
@@ -68,6 +69,7 @@ public partial class MainViewModel(
     private readonly HashSet<string> _offlineLibraryPaths = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private int _scanVersion;
     private int _activeScanOperations;
+    private int _activeMediaLoads;
     private readonly CancellationTokenSource _lifetimeCts = new();
 
     public ObservableCollection<MediaItemViewModel> Items => _items;
@@ -77,6 +79,8 @@ public partial class MainViewModel(
     {
         _disposed = true;
         _lifetimeCts.Cancel();
+        _reloadCts?.Cancel();
+        _mediaRefreshCts?.Cancel();
         _folderAvailabilityCts?.Cancel();
         if (_xnfoSubscribed)
         {
@@ -105,6 +109,9 @@ public partial class MainViewModel(
     public ObservableCollection<string> ExcludedFolders { get; } = [];
 
     public SettingsViewModel Settings { get; } = settings;
+
+    [ObservableProperty]
+    public partial bool IsMediaLoading { get; private set; }
 
     [ObservableProperty]
     public partial bool IsDetailsPaneOpen { get; set; } = false;
@@ -206,7 +213,7 @@ public partial class MainViewModel(
     }
 
     [ObservableProperty]
-    public partial bool IncludeDescendants { get; set; } = true;
+    public partial bool IncludeDescendants { get; set; }
 
     partial void OnIncludeDescendantsChanged(bool value)
     {
@@ -646,36 +653,14 @@ public partial class MainViewModel(
 
     private void SetLoadedThumbnail(Guid mediaFileId, string? thumbnailPath)
     {
-        var index = IndexOfLoadedItem(mediaFileId);
-        if (index < 0)
-        {
-            return;
-        }
-
-        var item = Items[index];
-        item.UpdateFile(item.File.WithThumbnailPath(thumbnailPath));
+        var item = _items.FindById(mediaFileId);
+        if (item is not null)
+            item.UpdateFile(item.File.WithThumbnailPath(thumbnailPath));
     }
 
     private void SetThumbnailState(Guid mediaFileId, ThumbnailLoadState state)
     {
-        var index = IndexOfLoadedItem(mediaFileId);
-        if (index >= 0)
-        {
-            Items[index].SetThumbnailState(state);
-        }
-    }
-
-    private int IndexOfLoadedItem(Guid mediaFileId)
-    {
-        for (var index = 0; index < Items.Count; index++)
-        {
-            if (Items[index].File.Id == mediaFileId)
-            {
-                return index;
-            }
-        }
-
-        return -1;
+        _items.FindById(mediaFileId)?.SetThumbnailState(state);
     }
 
     public void ShowInitialLoading()
@@ -1702,6 +1687,7 @@ public partial class MainViewModel(
     private void ScheduleReload(int delayMilliseconds)
     {
         _reloadCts?.Cancel();
+        _mediaRefreshCts?.Cancel();
         _reloadCts = new CancellationTokenSource();
         _ = ReloadAfterDelayAsync(delayMilliseconds, _reloadCts.Token);
     }
@@ -1759,8 +1745,26 @@ public partial class MainViewModel(
 
     private async Task RefreshMediaAsync(CancellationToken cancellationToken)
     {
-        await _mediaLoadSemaphore.WaitAsync(cancellationToken);
+        using var refreshCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _mediaRefreshCts?.Cancel();
+        _mediaRefreshCts = refreshCts;
         try
+        {
+            await RefreshMediaCoreAsync(refreshCts.Token);
+        }
+        catch (OperationCanceledException) when (refreshCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(_mediaRefreshCts, refreshCts))
+                _mediaRefreshCts = null;
+        }
+    }
+
+    private async Task RefreshMediaCoreAsync(CancellationToken cancellationToken)
+    {
+        await RunMediaLoadAsync(async () =>
         {
             var folderId = _selectedFolderId;
             if (folderId is null)
@@ -1780,7 +1784,7 @@ public partial class MainViewModel(
             var files = await Task.Run(async () =>
             {
                 var result = await queries.SearchAllAsync(query, cancellationToken).ConfigureAwait(false);
-                return SortMediaFiles(result, sortOrder, sortByFolder, sortDescending);
+                return SortMediaFiles(result, sortOrder, sortByFolder, sortDescending, cancellationToken);
             }, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (_selectedFolderId != folderId || query != CreateQuery(_selectedFolderId) || sortByFolder != SortFilesByFolder || sortOrder != SelectedMediaSortOption.SortOrder || sortDescending != IsSortDescending)
@@ -1822,17 +1826,12 @@ public partial class MainViewModel(
             OnVisibleItemsChanged(visible);
             RequestVisibleThumbnailRegeneration();
             StatusText = $"{Items.Count} files, {CountFolders(folderId)} folders";
-        }
-        finally
-        {
-            _mediaLoadSemaphore.Release();
-        }
+        }, cancellationToken);
     }
 
     private async Task ReloadAsync(Guid? folderId, CancellationToken cancellationToken)
     {
-        await _mediaLoadSemaphore.WaitAsync(cancellationToken);
-        try
+        await RunMediaLoadAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             Log($"Reload started: folderId={folderId?.ToString() ?? "none"} search='{SearchText}'");
@@ -1860,9 +1859,10 @@ public partial class MainViewModel(
             var files = await Task.Run(() => queries.SearchAllAsync(query, cancellationToken), cancellationToken);
             if (_isInitializing)
                 await ReportInitialLoadingAsync("InitialLoadingSorting", cancellationToken);
-            var items = await Task.Run(() => SortMediaFiles(files, sortOrder, sortByFolder, sortDescending)
-                .Select(file => new MediaItemViewModel(file))
-                .ToArray(), cancellationToken);
+            var items = await Task.Run(() => CancellableSort.ToArray(
+                CancellableSort.CheckItems(SortMediaFiles(files, sortOrder, sortByFolder, sortDescending, cancellationToken), cancellationToken)
+                    .Select(file => new MediaItemViewModel(file)), cancellationToken), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (_isInitializing)
                 await ReportInitialLoadingAsync("InitialLoadingDisplay", cancellationToken);
             _items.ReplaceAll(items);
@@ -1873,10 +1873,30 @@ public partial class MainViewModel(
 
             var folderCount = CountFolders(folderId);
             StatusText = $"{Items.Count} files, {folderCount} folders";
+        }, cancellationToken);
+    }
+
+    private async Task RunMediaLoadAsync(Func<Task> load, CancellationToken cancellationToken)
+    {
+        _activeMediaLoads++;
+        IsMediaLoading = true;
+        try
+        {
+            await _mediaLoadSemaphore.WaitAsync(cancellationToken);
+            try
+            {
+                await Dispatcher.UIThread.InvokeAsync(cancellationToken.ThrowIfCancellationRequested, DispatcherPriority.Background);
+                await load();
+                await Dispatcher.UIThread.InvokeAsync(cancellationToken.ThrowIfCancellationRequested, DispatcherPriority.Background);
+            }
+            finally
+            {
+                _mediaLoadSemaphore.Release();
+            }
         }
         finally
         {
-            _mediaLoadSemaphore.Release();
+            IsMediaLoading = --_activeMediaLoads > 0;
         }
     }
 
@@ -1899,45 +1919,46 @@ public partial class MainViewModel(
     private static int CountDescendantFolders(IEnumerable<FolderNode> nodes) =>
         nodes.Sum(node => 1 + CountDescendantFolders(node.Children));
 
-    private static MediaFile[] SortMediaFiles(
+    internal static MediaFile[] SortMediaFiles(
         IEnumerable<MediaFile> files,
         MediaListSortOrder sortOrder,
         bool sortByFolder,
-        bool descending)
+        bool descending,
+        CancellationToken cancellationToken)
     {
-        var orderedFiles = sortOrder switch
+        var checkedFiles = CancellableSort.CheckItems(files, cancellationToken);
+        var ordered = sortOrder switch
         {
-            MediaListSortOrder.None => files.ToArray(),
-            MediaListSortOrder.FileName => MediaFileHierarchySorter.Sort(files, sortByFolder).ToArray(),
-            MediaListSortOrder.FileSize => SortByFileSize(files, descending),
-            MediaListSortOrder.FileType => SortByFileType(files, descending),
-            MediaListSortOrder.DateModified => SortByModifiedDate(files, descending),
-            MediaListSortOrder.FileExtension => SortByExtension(files, descending),
+            MediaListSortOrder.None => checkedFiles,
+            MediaListSortOrder.FileName => MediaFileHierarchySorter.Sort(checkedFiles, sortByFolder, cancellationToken),
+            MediaListSortOrder.FileSize => SortByFileSize(checkedFiles, descending, cancellationToken),
+            MediaListSortOrder.FileType => SortByFileType(checkedFiles, descending, cancellationToken),
+            MediaListSortOrder.DateModified => SortByModifiedDate(checkedFiles, descending, cancellationToken),
+            MediaListSortOrder.FileExtension => SortByExtension(checkedFiles, descending, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(sortOrder), sortOrder, "Unknown media sort order.")
         };
-
-        return descending && sortOrder == MediaListSortOrder.FileName
-            ? orderedFiles.Reverse().ToArray()
-            : orderedFiles;
+        var orderedFiles = CancellableSort.ToArray(ordered, cancellationToken);
+        if (descending && sortOrder == MediaListSortOrder.FileName)
+            Array.Reverse(orderedFiles);
+        cancellationToken.ThrowIfCancellationRequested();
+        return orderedFiles;
     }
 
-    private static MediaFile[] SortByFileSize(IEnumerable<MediaFile> files, bool descending)
+    private static IEnumerable<MediaFile> SortByFileSize(IEnumerable<MediaFile> files, bool descending, CancellationToken cancellationToken)
     {
-        var ordered = files.OrderBy(file => file.FileSize is null);
+        var ordered = files.OrderBy(file => file.FileSize is null, CancellableSort.Comparer(Comparer<bool>.Default, cancellationToken));
         ordered = descending
             ? ordered.ThenByDescending(file => file.FileSize)
             : ordered.ThenBy(file => file.FileSize);
         return ordered.ThenBy(file => file.FileName, LogicalFileNameComparer.Instance)
-            .ThenBy(file => file.Id)
-            .ToArray();
+            .ThenBy(file => file.Id);
     }
 
-    private static MediaFile[] SortByFileType(IEnumerable<MediaFile> files, bool descending) => files
-        .OrderBy(file => file.MediaType is Garou.Domain.Enums.MediaType.Unknown)
+    private static IEnumerable<MediaFile> SortByFileType(IEnumerable<MediaFile> files, bool descending, CancellationToken cancellationToken) => files
+        .OrderBy(file => file.MediaType is Garou.Domain.Enums.MediaType.Unknown, CancellableSort.Comparer(Comparer<bool>.Default, cancellationToken))
         .ThenBy(file => GetMediaTypeSortKey(file.MediaType), descending ? Comparer<int>.Create((left, right) => right.CompareTo(left)) : Comparer<int>.Default)
         .ThenBy(file => file.FileName, LogicalFileNameComparer.Instance)
-        .ThenBy(file => file.Id)
-        .ToArray();
+        .ThenBy(file => file.Id);
 
     private static int GetMediaTypeSortKey(Garou.Domain.Enums.MediaType mediaType) => mediaType switch
     {
@@ -1947,25 +1968,24 @@ public partial class MainViewModel(
         _ => 3
     };
 
-    private static MediaFile[] SortByModifiedDate(IEnumerable<MediaFile> files, bool descending)
+    private static IEnumerable<MediaFile> SortByModifiedDate(IEnumerable<MediaFile> files, bool descending, CancellationToken cancellationToken)
     {
-        var ordered = files.OrderBy(file => file.ModifiedDateUtc is null);
+        var ordered = files.OrderBy(file => file.ModifiedDateUtc is null, CancellableSort.Comparer(Comparer<bool>.Default, cancellationToken));
         ordered = descending
             ? ordered.ThenByDescending(file => file.ModifiedDateUtc)
             : ordered.ThenBy(file => file.ModifiedDateUtc);
         return ordered.ThenBy(file => file.FileName, LogicalFileNameComparer.Instance)
-            .ThenBy(file => file.Id)
-            .ToArray();
+            .ThenBy(file => file.Id);
     }
 
-    private static MediaFile[] SortByExtension(IEnumerable<MediaFile> files, bool descending)
+    private static IEnumerable<MediaFile> SortByExtension(IEnumerable<MediaFile> files, bool descending, CancellationToken cancellationToken)
     {
+        var comparer = CancellableSort.Comparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
         var ordered = descending
-            ? files.OrderByDescending(file => file.Extension, StringComparer.OrdinalIgnoreCase)
-            : files.OrderBy(file => file.Extension, StringComparer.OrdinalIgnoreCase);
+            ? files.OrderByDescending(file => file.Extension, comparer)
+            : files.OrderBy(file => file.Extension, comparer);
         return ordered.ThenBy(file => file.FileName, LogicalFileNameComparer.Instance)
-            .ThenBy(file => file.Id)
-            .ToArray();
+            .ThenBy(file => file.Id);
     }
 
     private MediaQuery CreateQuery(Guid? folderId) => new(

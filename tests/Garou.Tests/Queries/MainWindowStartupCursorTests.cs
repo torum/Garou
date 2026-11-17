@@ -93,6 +93,44 @@ public sealed class MainWindowStartupCursorTests
                 phase => Assert.Contains("Sorting media", phase),
                 phase => Assert.Contains("Adding media", phase),
                 phase => Assert.Contains("Preparing the window layout", phase));
+
+            var normalCursor = window.Cursor;
+            search.Reset();
+            var anotherFolder = new Folder { Path = Path.Combine(Path.GetTempPath(), "another-library") };
+            viewModel.SelectedFolder = new FolderNode(anotherFolder, [], true);
+            await search.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(viewModel.IsMediaLoading);
+            Assert.Same(startingCursor, window.Cursor);
+            Assert.Equal(string.Empty, viewModel.StatusText);
+
+            search.Reset();
+            viewModel.SelectedFolder = new FolderNode(folder, [], true);
+            await search.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(viewModel.IsMediaLoading);
+            Assert.Same(startingCursor, window.Cursor);
+            var completed = WaitForMediaLoadAsync(viewModel);
+            search.Release.TrySetResult();
+            await completed.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.False(viewModel.IsMediaLoading);
+            Assert.Same(normalCursor, window.Cursor);
+            Assert.Equal("1 files, 0 folders", viewModel.StatusText);
+
+            normalCursor = window.Cursor;
+            search.Reset();
+            var errorShown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            viewModel.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainViewModel.IsInfoBarOpen) && viewModel.IsInfoBarOpen)
+                    errorShown.TrySetResult();
+            };
+            viewModel.SelectedFolder = new FolderNode(anotherFolder, [], true);
+            await search.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Same(startingCursor, window.Cursor);
+            search.Release.TrySetException(new InvalidOperationException("Media load failed"));
+            await errorShown.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.False(viewModel.IsMediaLoading);
+            Assert.Same(normalCursor, window.Cursor);
+            Assert.Contains("Media load failed", viewModel.StatusText);
         }
         finally
         {
@@ -130,14 +168,36 @@ public sealed class MainWindowStartupCursorTests
         public Task DeleteSubtreeAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
+    private static Task WaitForMediaLoadAsync(MainViewModel viewModel)
+    {
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsMediaLoading) && !viewModel.IsMediaLoading)
+            {
+                viewModel.PropertyChanged -= OnChanged;
+                completed.TrySetResult();
+            }
+        }
+        viewModel.PropertyChanged += OnChanged;
+        return completed.Task;
+    }
+
     private sealed class GatedSearch(MediaFile file) : IMediaSearchRepository
     {
-        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Started { get; private set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; private set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public void Reset()
+        {
+            Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
         public async Task<IReadOnlyList<MediaFile>> SearchAsync(BuiltQuery query, CancellationToken cancellationToken)
         {
-            Started.TrySetResult();
-            await Release.Task.WaitAsync(cancellationToken);
+            var started = Started;
+            var release = Release;
+            started.TrySetResult();
+            await release.Task.WaitAsync(cancellationToken);
             return [file];
         }
         public Task<long> CountAsync(BuiltQuery query, CancellationToken cancellationToken) => Task.FromResult(1L);

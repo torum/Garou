@@ -4,21 +4,33 @@ namespace Garou.Application.Queries;
 
 public static class MediaFileHierarchySorter
 {
-    public static IEnumerable<MediaFile> Sort(IEnumerable<MediaFile> files, bool sortByFolder) =>
-        sortByFolder ? SortByFolder(files) : files.OrderBy(file => file.FileName, LogicalFileNameComparer.Instance);
+    public static IEnumerable<MediaFile> Sort(IEnumerable<MediaFile> files, bool sortByFolder, CancellationToken cancellationToken = default)
+    {
+        var checkedFiles = CancellableSort.CheckItems(files, cancellationToken);
+        return sortByFolder
+            ? SortByFolder(checkedFiles, cancellationToken)
+            : checkedFiles.OrderBy(file => file.FileName, CancellableSort.Comparer(LogicalFileNameComparer.Instance, cancellationToken));
+    }
 
-    private static IEnumerable<MediaFile> SortByFolder(IEnumerable<MediaFile> files) =>
-        files.Select(file => new
+    private static IEnumerable<MediaFile> SortByFolder(IEnumerable<MediaFile> files, CancellationToken cancellationToken)
+    {
+        var folderParts = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        return files.Select(file =>
             {
-                File = file,
-                FolderParts = (Path.GetDirectoryName(file.Path) ?? string.Empty)
-                    .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries)
+                var directory = Path.GetDirectoryName(file.Path) ?? string.Empty;
+                if (!folderParts.TryGetValue(directory, out var parts))
+                {
+                    parts = directory.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+                    folderParts.Add(directory, parts);
+                }
+                return new { File = file, FolderParts = parts };
             })
-            .OrderBy(item => item.FolderParts, FolderPartsComparer.Instance)
+            .OrderBy(item => item.FolderParts, CancellableSort.Comparer(FolderPartsComparer.Instance, cancellationToken))
             .ThenBy(item => item.File.FileName, LogicalFileNameComparer.Instance)
             .ThenBy(item => item.File.FileName, StringComparer.Ordinal)
             .ThenBy(item => item.File.Id)
             .Select(item => item.File);
+    }
 
     private sealed class FolderPartsComparer : IComparer<string[]>
     {

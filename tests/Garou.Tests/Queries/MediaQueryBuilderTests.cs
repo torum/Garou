@@ -25,10 +25,10 @@ public sealed class MediaQueryBuilderTests
     }
 
     [Fact]
-    public void WhenFolderIdIsSetThenFolderFilterIsParameterized()
+    public void WhenFolderIdIsSetAndDescendantsAreIncludedThenFolderFilterIsParameterized()
     {
         var folderId = Guid.CreateVersion7();
-        var built = MediaQueryBuilder.Build(CreateQuery() with { FolderId = folderId });
+        var built = MediaQueryBuilder.Build(CreateQuery() with { FolderId = folderId, IncludeDescendants = true });
 
         Assert.Contains("WITH RECURSIVE", built.Sql);
         Assert.Contains("$folderId", built.Sql);
@@ -36,10 +36,10 @@ public sealed class MediaQueryBuilderTests
     }
 
     [Fact]
-    public void WhenDescendantsAreExcludedThenOnlySelectedFolderIsQueried()
+    public void WhenDescendantsAreNotSpecifiedThenOnlySelectedFolderIsQueried()
     {
         var folderId = Guid.CreateVersion7();
-        var built = MediaQueryBuilder.Build(CreateQuery() with { FolderId = folderId, IncludeDescendants = false });
+        var built = MediaQueryBuilder.Build(CreateQuery() with { FolderId = folderId });
 
         Assert.Contains("FolderId = $folderId", built.Sql);
         Assert.DoesNotContain("WITH RECURSIVE", built.Sql);

@@ -274,14 +274,14 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task WhenDescendantPreferenceIsMissingThenItDefaultsToTrue()
+    public async Task WhenDescendantPreferenceIsMissingThenItDefaultsToFalse()
     {
         await File.WriteAllTextAsync(_settingsPath, "<Settings />", TestContext.Current.CancellationToken);
         var store = new SettingsStore(_settingsPath);
 
         var loaded = await store.LoadAsync(CancellationToken.None);
 
-        Assert.True(loaded.IncludeDescendants);
+        Assert.False(loaded.IncludeDescendants);
     }
 
     [Fact]
