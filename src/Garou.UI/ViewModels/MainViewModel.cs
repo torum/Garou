@@ -56,6 +56,7 @@ public partial class MainViewModel(
     private readonly ResettableObservableCollection<MediaItemViewModel> _items = new();
     private IReadOnlyList<MediaFile> _visibleThumbnailFiles = [];
     private readonly object _thumbnailRegenerationLock = new();
+    private CancellationTokenSource? _thumbnailGenerationCts;
     private long _visibleThumbnailVersion;
     private bool _thumbnailRegenerationWorkerRunning;
     private bool _xnfoSubscribed;
@@ -734,6 +735,7 @@ public partial class MainViewModel(
             if (!HaveSameMediaFiles(_visibleThumbnailFiles, currentVisibleFiles))
             {
                 _visibleThumbnailVersion++;
+                _thumbnailGenerationCts?.Cancel();
             }
 
             _visibleThumbnailFiles = currentVisibleFiles;
@@ -768,16 +770,27 @@ public partial class MainViewModel(
         lock (_thumbnailRegenerationLock)
         {
             _visibleThumbnailVersion++;
+            _thumbnailGenerationCts?.Cancel();
         }
 
         StartVisibleThumbnailRegenerationWorker();
+    }
+
+    private void InvalidateVisibleThumbnails()
+    {
+        lock (_thumbnailRegenerationLock)
+        {
+            _visibleThumbnailFiles = [];
+            _visibleThumbnailVersion++;
+            _thumbnailGenerationCts?.Cancel();
+        }
     }
 
     private void StartVisibleThumbnailRegenerationWorker()
     {
         lock (_thumbnailRegenerationLock)
         {
-            if (_isInitializing || _thumbnailRegenerationWorkerRunning)
+            if (_disposed || _isInitializing || _thumbnailRegenerationWorkerRunning)
             {
                 return;
             }
@@ -898,6 +911,8 @@ public partial class MainViewModel(
 
                 // Debounce: waiting here is not "generating", so the flag stays false.
                 await Task.Delay(ThumbnailRegenerationDelayMilliseconds);
+                if (_disposed)
+                    break;
                 if (!IsVisibleThumbnailVersionCurrent(observedVersion))
                 {
                     continue;
@@ -939,24 +954,40 @@ public partial class MainViewModel(
                     continue;
                 }
 
-                // Only now is work actually happening.
+                CancellationTokenSource generationCts;
+                lock (_thumbnailRegenerationLock)
+                {
+                    if (_disposed || _visibleThumbnailVersion != observedVersion)
+                        continue;
+                    generationCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
+                    _thumbnailGenerationCts = generationCts;
+                }
+
                 IsGeneratingThumbnails = true;
                 try
                 {
                     await GenerateThumbnailsAsync(
                         staleFiles,
                         "Generating",
-                        (file, _) => thumbnailGenerator.GenerateAsync(file, thumbnailSize, CancellationToken.None),
-                        CancellationToken.None,
+                        (file, token) => thumbnailGenerator.GenerateAsync(file, thumbnailSize, token),
+                        generationCts.Token,
                         () => IsVisibleThumbnailVersionCurrent(observedVersion));
-                    ThumbnailStatusText = string.Empty;
+                }
+                catch (OperationCanceledException) when (generationCts.IsCancellationRequested)
+                {
                 }
                 finally
                 {
+                    lock (_thumbnailRegenerationLock)
+                    {
+                        _thumbnailGenerationCts = null;
+                        generationCts.Dispose();
+                    }
+                    ThumbnailStatusText = string.Empty;
                     IsGeneratingThumbnails = false;
                 }
 
-                if (IsVisibleThumbnailVersionCurrent(observedVersion))
+                if (_disposed || IsVisibleThumbnailVersionCurrent(observedVersion))
                 {
                     break;
                 }
@@ -974,7 +1005,7 @@ public partial class MainViewModel(
             lock (_thumbnailRegenerationLock)
             {
                 _thumbnailRegenerationWorkerRunning = false;
-                if (!_isInitializing && _visibleThumbnailVersion != observedVersion)
+                if (!_disposed && !_isInitializing && _visibleThumbnailVersion != observedVersion)
                 {
                     _thumbnailRegenerationWorkerRunning = true;
                     restartWorker = true;
@@ -1585,6 +1616,7 @@ public partial class MainViewModel(
         UpdateSettingsSession();
         if (!_suppressSelectedFolderReload)
         {
+            InvalidateVisibleThumbnails();
             ScheduleReload(0);
         }
     }
@@ -1738,6 +1770,7 @@ public partial class MainViewModel(
         {
             cancellationToken.ThrowIfCancellationRequested();
             Log($"Reload started: folderId={folderId?.ToString() ?? "none"} search='{SearchText}'");
+            InvalidateVisibleThumbnails();
             var selectedMediaId = SelectedItem?.File.Id;
             foreach (var item in Items)
             {

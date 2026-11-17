@@ -235,6 +235,37 @@ public sealed class VirtualizingUniformPanelResizeTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task CollectionResetDiscardsQueuedVisibleItemsFromPreviousFolder()
+    {
+        var (window, list, items) = CreateWindow(600, 300);
+        try
+        {
+            window.Show();
+            await SettleAsync(window);
+            var panel = list.GetVisualDescendants().OfType<VirtualizingUniformPanel>().Single();
+            var viewer = list.GetVisualDescendants().OfType<ScrollViewer>().First();
+            var notifications = new List<List<object>>();
+            panel.VisibleItemsChanged += (_, visible) => notifications.Add(visible);
+
+            viewer.Offset = new Vector(0, 2500);
+            window.UpdateLayout();
+            var replacement = new object();
+            items.Clear();
+            items.Add(replacement);
+            viewer.Offset = new Vector(0, 0);
+            await SettleAsync(window);
+
+            Assert.NotEmpty(notifications);
+            Assert.All(notifications.SelectMany(visible => visible), item => Assert.Same(replacement, item));
+            Assert.Contains(notifications, visible => visible.Contains(replacement));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
     private static (Window Window, ListBox List, ObservableCollection<object> Items) CreateWindow(double width, double height)
     {
         var items = new ObservableCollection<object>(Enumerable.Range(0, 200).Select(_ => new object()));

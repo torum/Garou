@@ -53,6 +53,7 @@ public class VirtualizingUniformPanel : VirtualizingPanel
     private int _lastFirstVisibleIndex = -1;
     private int _lastLastVisibleIndex = -1;
     private int _lastItemCount = -1;
+    private long _visibleNotificationVersion;
 
     protected override void OnItemsChanged(IReadOnlyList<object?>? items, NotifyCollectionChangedEventArgs e)
     {
@@ -65,6 +66,8 @@ public class VirtualizingUniformPanel : VirtualizingPanel
         _lastFirstVisibleIndex = -1;
         _lastLastVisibleIndex = -1;
         _lastItemCount = -1;
+        _lastVisibleDataItems = new List<object>();
+        _visibleNotificationVersion++;
         _pendingAnchor = null;
 
         InvalidateMeasure();
@@ -152,7 +155,8 @@ public class VirtualizingUniformPanel : VirtualizingPanel
         _lastFirstVisibleIndex = -1;
         _lastLastVisibleIndex = -1;
         _lastItemCount = -1;
-        _lastVisibleDataItems.Clear();
+        _lastVisibleDataItems = new List<object>();
+        _visibleNotificationVersion++;
         InvalidateMeasure();
     }
 
@@ -284,10 +288,12 @@ public class VirtualizingUniformPanel : VirtualizingPanel
             if (!_lastVisibleDataItems.SequenceEqual(currentVisibleDataItems))
             {
                 _lastVisibleDataItems = currentVisibleDataItems;
+                var notificationVersion = ++_visibleNotificationVersion;
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    VisibleItemsChanged?.Invoke(this, currentVisibleDataItems);
-                },Avalonia.Threading.DispatcherPriority.Render);
+                    if (notificationVersion == _visibleNotificationVersion)
+                        VisibleItemsChanged?.Invoke(this, currentVisibleDataItems);
+                }, Avalonia.Threading.DispatcherPriority.Render);
             }
         }
 
