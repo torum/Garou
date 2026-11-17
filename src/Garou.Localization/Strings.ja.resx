@@ -267,6 +267,7 @@
   <data name="ScanCount" xml:space="preserve"><value>{0} — {1:N0} / {2:N0}</value></data>
   <data name="ScanBusy" xml:space="preserve"><value>現在のライブラリ処理が終了するまでお待ちください。</value></data>
   <data name="ScanFailed" xml:space="preserve"><value>{0}のスキャンまたは更新に失敗しました: {1}</value></data>
+  <data name="MonitoringIssue" xml:space="preserve"><value>{0}のファイル監視が不完全な可能性があります。最初のエラー: {1}</value></data>
   <data name="ScanSkippedItems" xml:space="preserve"><value>{0}のスキャン中に{1}個の項目を読み取れませんでした(例: {2})</value></data>
   <data name="ExcludedFoldersLabel" xml:space="preserve"><value>除外されたフォルダー</value></data>
   <data name="ExcludedFoldersDescription" xml:space="preserve"><value>フォルダーを復元すると、関連するライブラリを再スキャンします。他の除外フォルダーやスキャン設定は引き続き適用されます。</value></data>

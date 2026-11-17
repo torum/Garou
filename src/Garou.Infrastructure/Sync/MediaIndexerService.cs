@@ -35,6 +35,9 @@ public sealed class MediaIndexerService(
     internal Func<string, IEnumerable<string>> EnumerateDirectoryEntries { get; set; } =
         path => Directory.EnumerateFileSystemEntries(path);
 
+    internal ApplicationStorageFilter StorageFilter { get; set; } = ApplicationStorageFilter.Default;
+    internal TimeSpan RetryInterval { get; set; } = OfflineRetryInterval;
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         var enabled = (await libraries.GetAllAsync(cancellationToken).ConfigureAwait(false))
@@ -48,38 +51,81 @@ public sealed class MediaIndexerService(
 
     private async Task ConsumeAsync(LibraryDefinition library, CancellationToken cancellationToken)
     {
+        var needsInitialScan = true;
+        var reconcileAfterRestart = false;
         while (!cancellationToken.IsCancellationRequested)
         {
-            var scanCompleted = false;
+            var scanning = false;
             try
             {
-                using (await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false))
+                if (needsInitialScan)
                 {
-                    await RunAutomaticScanAsync(library, clearSuppressedPaths: true, cancellationToken).ConfigureAwait(false);
-                }
-                scanCompleted = true;
-                if (!library.IsOnline)
-                {
-                    await Task.Delay(OfflineRetryInterval, timeProvider, cancellationToken).ConfigureAwait(false);
-                    continue;
+                    scanning = true;
+                    using (await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        await RunAutomaticScanAsync(library, clearSuppressedPaths: true, cancellationToken).ConfigureAwait(false);
+                    }
+                    scanning = false;
+                    if (!library.IsOnline)
+                    {
+                        await Task.Delay(RetryInterval, timeProvider, cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
+                    needsInitialScan = false;
                 }
 
                 await foreach (var change in watcher.WatchAsync(library, cancellationToken).ConfigureAwait(false))
                 {
-                    await HandleAsync(library, change, cancellationToken).ConfigureAwait(false);
+                    if (change.WatcherReady)
+                    {
+                        if (reconcileAfterRestart)
+                        {
+                            scanning = true;
+                            using (await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false))
+                            {
+                                await RunAutomaticScanAsync(library, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
+                            }
+                            scanning = false;
+                            reconcileAfterRestart = false;
+                            if (!library.IsOnline)
+                            {
+                                needsInitialScan = true;
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        await HandleAsync(library, change, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    if (library.IsOnline)
+                    {
+                        IndexingIssue?.Invoke(library.RootPath, "File monitoring stopped unexpectedly; retrying.");
+                        reconcileAfterRestart = true;
+                    }
+                    else
+                    {
+                        needsInitialScan = true;
+                    }
+                    await Task.Delay(RetryInterval, timeProvider, cancellationToken).ConfigureAwait(false);
                 }
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                // A failed scan or watcher must not permanently stop this library's indexing.
                 System.Diagnostics.Debug.WriteLine($"Indexing of '{library.RootPath}' failed: {exception}");
-                if (scanCompleted)
+                if (!scanning)
                 {
-                    // Scan failures are already reported through AutomaticScanFinished.
                     IndexingIssue?.Invoke(library.RootPath, exception.Message);
                 }
-
-                await Task.Delay(OfflineRetryInterval, timeProvider, cancellationToken).ConfigureAwait(false);
+                if (!needsInitialScan)
+                {
+                    reconcileAfterRestart = true;
+                }
+                await Task.Delay(RetryInterval, timeProvider, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -151,12 +197,17 @@ public sealed class MediaIndexerService(
         while (pendingDirectories.TryPop(out var directory))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (StorageFilter.IsIgnored(directory))
+            {
+                continue;
+            }
             try
             {
                 foreach (var path in EnumerateDirectoryEntries(directory))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (IsExcluded(path, excludedPaths) || (!clearSuppressedPaths && operationGate.IsPathSuppressed(path)))
+                    if (StorageFilter.IsIgnored(path) || IsExcluded(path, excludedPaths)
+                        || (!clearSuppressedPaths && operationGate.IsPathSuppressed(path)))
                     {
                         continue;
                     }
@@ -408,8 +459,20 @@ public sealed class MediaIndexerService(
 
     internal async Task HandleAsync(LibraryDefinition library, FileChangeEvent change, CancellationToken cancellationToken)
     {
+        if (change.WatcherError is { } watcherError)
+        {
+            IndexingIssue?.Invoke(library.RootPath, watcherError);
+            return;
+        }
+
+        var filtered = StorageFilter.Filter(change);
+        if (filtered is null)
+        {
+            return;
+        }
+
         using var operation = await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false);
-        await HandleCoreAsync(library, change, cancellationToken).ConfigureAwait(false);
+        await HandleCoreAsync(library, filtered, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task HandleCoreAsync(LibraryDefinition library, FileChangeEvent change, CancellationToken cancellationToken)

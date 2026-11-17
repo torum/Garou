@@ -1,4 +1,3 @@
-using System.Threading.Channels;
 using Garou.Domain.Abstractions;
 using Garou.Domain.Models;
 
@@ -8,6 +7,8 @@ public sealed class FileWatcherService : IFileWatcherService
 {
     private const int ChannelCapacity = 4096;
     private const int WatcherBufferSize = 64 * 1024;
+
+    internal ApplicationStorageFilter StorageFilter { get; set; } = ApplicationStorageFilter.Default;
 
     public async IAsyncEnumerable<FileChangeEvent> WatchAsync(
         LibraryDefinition library,
@@ -19,18 +20,14 @@ public sealed class FileWatcherService : IFileWatcherService
             yield break;
         }
 
-        var channel = Channel.CreateBounded<FileChangeEvent>(new BoundedChannelOptions(ChannelCapacity)
-        {
-            SingleReader = true,
-            FullMode = BoundedChannelFullMode.Wait
-        });
-        var overflowed = 0;
+        var queue = new WatcherEventQueue(library.RootPath, ChannelCapacity);
 
         void Publish(FileChangeEvent change)
         {
-            if (!channel.Writer.TryWrite(change))
+            var filtered = StorageFilter.Filter(change);
+            if (filtered is not null)
             {
-                Interlocked.Exchange(ref overflowed, 1);
+                queue.Publish(filtered);
             }
         }
 
@@ -55,29 +52,21 @@ public sealed class FileWatcherService : IFileWatcherService
         watcher.Changed += (_, e) => Publish(Create(FileChangeKind.Modified, e.FullPath));
         watcher.Deleted += (_, e) => Publish(Create(FileChangeKind.Deleted, e.FullPath));
         watcher.Renamed += (_, e) => Publish(Create(FileChangeKind.Renamed, e.FullPath, e.OldFullPath));
-        watcher.Error += (_, _) =>
-        {
-            Interlocked.Exchange(ref overflowed, 1);
-            channel.Writer.TryWrite(Create(FileChangeKind.Modified, library.RootPath, requiresFullRescan: true));
-        };
+        watcher.Error += (_, e) => queue.ReportError(e.GetException());
 
         watcher.EnableRaisingEvents = true;
 
         try
         {
-            await foreach (var change in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            yield return new FileChangeEvent { LibraryRoot = library.RootPath, FullPath = library.RootPath, WatcherReady = true };
+            await foreach (var change in queue.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
                 yield return change;
-
-                if (Interlocked.Exchange(ref overflowed, 0) == 1)
-                {
-                    yield return Create(FileChangeKind.Modified, library.RootPath, requiresFullRescan: true);
-                }
             }
         }
         finally
         {
-            channel.Writer.TryComplete();
+            queue.Complete();
         }
     }
 }

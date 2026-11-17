@@ -19,4 +19,8 @@ public sealed class FileChangeEvent
     public FileChangeKind Kind { get; init; }
 
     public bool RequiresFullRescan { get; init; }
+
+    public bool WatcherReady { get; init; }
+
+    public string? WatcherError { get; init; }
 }

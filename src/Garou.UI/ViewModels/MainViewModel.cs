@@ -1592,7 +1592,7 @@ public partial class MainViewModel(
     private void OnIndexingIssue(string path, string message) => Dispatcher.UIThread.Post(() =>
     {
         if (!_disposed)
-            ReportError(string.Format(Localize("ScanFailed"), path, message));
+            ReportError(string.Format(Localize("MonitoringIssue"), path, message));
     });
 
     private void OnItemsSkipped(string path, int count, string example) => Dispatcher.UIThread.Post(() =>

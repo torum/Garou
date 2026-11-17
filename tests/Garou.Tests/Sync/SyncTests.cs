@@ -11,6 +11,159 @@ namespace Garou.Tests.Sync;
 public sealed class SyncTests
 {
     [Fact]
+    public async Task WhenLibraryContainsApplicationCacheThenScansAndEventsIgnoreIt()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"storage-filter-{Guid.NewGuid():N}");
+        var cache = Path.Combine(root, "cache", "thumbnails");
+        var cacheFolder = Path.Combine(cache, "generated");
+        Directory.CreateDirectory(cacheFolder);
+        var mediaPath = Path.Combine(root, "photo.jpg");
+        var thumbnailPath = Path.Combine(cacheFolder, "thumbnail.jpg");
+        await File.WriteAllBytesAsync(mediaPath, [1, 2, 3], TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(thumbnailPath, [1, 2, 3], TestContext.Current.CancellationToken);
+        var databasePath = Path.Combine(root, "library.db");
+        var filter = new ApplicationStorageFilter(cache, databasePath, Path.Combine(root, "Garou.config"));
+        var repository = new FakeMediaFileRepository();
+        repository.StoredPaths.Add(thumbnailPath);
+        var library = new LibraryDefinition { RootPath = root, IsEnabled = true };
+        using var stop = new CancellationTokenSource();
+        var watcher = new ScriptedWatcher(() => { },
+        [
+            new FileChangeEvent { LibraryRoot = root, FullPath = cacheFolder, Kind = FileChangeKind.Created },
+            new FileChangeEvent { LibraryRoot = root, FullPath = thumbnailPath, Kind = FileChangeKind.Created },
+            new FileChangeEvent { LibraryRoot = root, FullPath = databasePath + "-wal", Kind = FileChangeKind.Modified }
+        ], stop);
+        var service = CreateService(repository, watcher, library, CreateSettingsSession(".jpg"));
+        service.StorageFilter = filter;
+        var scans = 0;
+        service.AutomaticScanStarted += _ => scans++;
+
+        try
+        {
+            await service.RunAsync(stop.Token);
+            Assert.Equal(1, scans);
+            Assert.Equal(mediaPath, Assert.Single(repository.Upserted).Path);
+            Assert.Equal([thumbnailPath], repository.DeletedPaths);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WhenFileMovesAcrossApplicationCacheBoundaryThenChangeIsConverted()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "storage-filter-test");
+        var cache = Path.Combine(root, "cache");
+        var filter = new ApplicationStorageFilter(cache, Path.Combine(root, "library.db"), Path.Combine(root, "Garou.config"));
+        var outside = Path.Combine(root, "photo.jpg");
+        var inside = Path.Combine(cache, "photo.jpg");
+        var intoCache = filter.Filter(new FileChangeEvent { LibraryRoot = root, FullPath = inside, OldFullPath = outside, Kind = FileChangeKind.Renamed });
+        var outOfCache = filter.Filter(new FileChangeEvent { LibraryRoot = root, FullPath = outside, OldFullPath = inside, Kind = FileChangeKind.Renamed });
+
+        Assert.NotNull(intoCache);
+        Assert.Equal(FileChangeKind.Deleted, intoCache.Kind);
+        Assert.Equal(outside, intoCache.FullPath);
+        Assert.NotNull(outOfCache);
+        Assert.Equal(FileChangeKind.Created, outOfCache.Kind);
+        Assert.Equal(outside, outOfCache.FullPath);
+        Assert.False(filter.IsIgnored(Path.Combine(root, "cache-other", "photo.jpg")));
+        Assert.True(filter.IsIgnored(Path.Combine(root, "library.db-wal")));
+        Assert.False(filter.IsIgnored(Path.Combine(root, "library.db-wal-backup")));
+        Assert.Null(filter.Filter(new FileChangeEvent { LibraryRoot = root, FullPath = inside, Kind = FileChangeKind.Created }));
+    }
+
+    [Fact]
+    public async Task WhenRealWatcherSeesCacheChangesThenItStillReportsLibraryChanges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"storage-watcher-{Guid.NewGuid():N}");
+        var cache = Path.Combine(root, "cache");
+        Directory.CreateDirectory(cache);
+        var watcher = new FileWatcherService
+        {
+            StorageFilter = new ApplicationStorageFilter(cache, Path.Combine(root, "library.db"), Path.Combine(root, "Garou.config"))
+        };
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var library = new LibraryDefinition { RootPath = root };
+
+        try
+        {
+            await using var events = watcher.WatchAsync(library, stop.Token).GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            Assert.True(await events.MoveNextAsync());
+            Assert.True(events.Current.WatcherReady);
+            var next = events.MoveNextAsync().AsTask();
+            var generated = Path.Combine(cache, "generated");
+            Directory.CreateDirectory(generated);
+            await File.WriteAllBytesAsync(Path.Combine(generated, "thumbnail.jpg"), [1, 2, 3], stop.Token);
+            var mediaPath = Path.Combine(root, "photo.jpg");
+            await File.WriteAllBytesAsync(mediaPath, [1, 2, 3], stop.Token);
+
+            Assert.True(await next);
+            Assert.Equal(mediaPath, events.Current.FullPath);
+            Assert.False(events.Current.RequiresFullRescan);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenWatcherSetupFailsThenOnlyRecoveryTriggersAnotherScan()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"watcher-retry-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var lateFile = Path.Combine(root, "late.jpg");
+        using var stop = new CancellationTokenSource();
+        var watcher = new RetryingWatcher(lateFile, stop);
+        var repository = new FakeMediaFileRepository();
+        var service = CreateService(repository, watcher, new LibraryDefinition { RootPath = root, IsEnabled = true }, CreateSettingsSession(".jpg"));
+        service.RetryInterval = TimeSpan.Zero;
+        var scans = 0;
+        var issues = 0;
+        service.AutomaticScanStarted += _ => scans++;
+        service.IndexingIssue += (_, _) => issues++;
+
+        try
+        {
+            await service.RunAsync(stop.Token);
+            Assert.Equal(3, watcher.Attempts);
+            Assert.Equal(2, issues);
+            Assert.Equal(2, scans);
+            Assert.Equal(lateFile, Assert.Single(repository.Upserted).Path);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenWatcherStopsUnexpectedlyThenIndexerDoesNotImmediatelyRescan()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"watcher-stopped-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        using var stop = new CancellationTokenSource();
+        var service = CreateService(new FakeMediaFileRepository(), new NoopWatcher(), new LibraryDefinition { RootPath = root, IsEnabled = true });
+        var scans = 0;
+        var issues = 0;
+        service.AutomaticScanStarted += _ => scans++;
+        service.IndexingIssue += (_, _) => { issues++; stop.Cancel(); };
+
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.RunAsync(stop.Token));
+            Assert.Equal(1, scans);
+            Assert.Equal(1, issues);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task WhenRemovalHoldsOperationGateThenIndexerScanWaits()
     {
         var gate = new LibraryOperationGate();
@@ -962,6 +1115,22 @@ public sealed class SyncTests
         {
             await Task.CompletedTask;
             yield break;
+        }
+    }
+
+    private sealed class RetryingWatcher(string lateFile, CancellationTokenSource stop) : IFileWatcherService
+    {
+        public int Attempts { get; private set; }
+
+        public async IAsyncEnumerable<FileChangeEvent> WatchAsync(LibraryDefinition library, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            Attempts++;
+            if (Attempts < 3)
+                throw new IOException("watcher unavailable");
+
+            await File.WriteAllBytesAsync(lateFile, [1, 2, 3], cancellationToken);
+            yield return new FileChangeEvent { LibraryRoot = library.RootPath, FullPath = library.RootPath, WatcherReady = true };
+            stop.Cancel();
         }
     }
 
