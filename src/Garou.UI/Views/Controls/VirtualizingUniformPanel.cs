@@ -12,6 +12,15 @@ public class VirtualizingUniformPanel : VirtualizingPanel
     private readonly Dictionary<int, Control> _realizedContainers = new();
     private readonly Dictionary<Control, int> _realizedIndices = new();
     private Rect _viewport;
+    private int _layoutColumns;
+    private double _layoutWidth;
+    private double _layoutItemHeight;
+    private ViewportAnchor? _pendingAnchor;
+
+    private sealed record ViewportAnchor(int Index, object? Item, double RowFraction, ScrollViewer Viewer, double Offset)
+    {
+        public double MinimumMaxOffset { get; set; } = double.PositiveInfinity;
+    }
 
     private List<object> _lastVisibleDataItems = new();
     public event EventHandler<List<object>>? VisibleItemsChanged;
@@ -56,6 +65,7 @@ public class VirtualizingUniformPanel : VirtualizingPanel
         _lastFirstVisibleIndex = -1;
         _lastLastVisibleIndex = -1;
         _lastItemCount = -1;
+        _pendingAnchor = null;
 
         InvalidateMeasure();
     }
@@ -65,8 +75,76 @@ public class VirtualizingUniformPanel : VirtualizingPanel
         if (_viewport == e.EffectiveViewport)
             return;
 
+        TrackPendingExtent();
+        if (_viewport.Size != e.EffectiveViewport.Size)
+        {
+            CaptureViewportAnchor();
+        }
+
         _viewport = e.EffectiveViewport;
         InvalidateMeasure();
+    }
+
+    private void CaptureViewportAnchor()
+    {
+        var items = Items;
+        var scrollViewer = this.GetVisualAncestors().OfType<ScrollViewer>().FirstOrDefault();
+        if (_pendingAnchor is not null || items is null || items.Count == 0 || scrollViewer is null ||
+            _layoutColumns == 0 || _layoutWidth <= 0 || _layoutItemHeight <= 0 ||
+            _viewport.Top <= 0 || _viewport.Width <= 0 || _viewport.Height <= 0 ||
+            !double.IsFinite(_viewport.Top) || !double.IsFinite(_viewport.Height))
+        {
+            return;
+        }
+
+        var centerY = _viewport.Top + _viewport.Height / 2;
+        var row = (int)(centerY / _layoutItemHeight);
+        var column = Math.Clamp((int)((_viewport.Left + _viewport.Width / 2) / (_layoutWidth / _layoutColumns)), 0, _layoutColumns - 1);
+        var index = Math.Min(items.Count - 1, row * _layoutColumns + column);
+        var rowFraction = Math.Clamp((centerY - (index / _layoutColumns) * _layoutItemHeight) / _layoutItemHeight, 0, 1);
+        var anchor = new ViewportAnchor(index, items[index], rowFraction, scrollViewer, scrollViewer.Offset.Y);
+        _pendingAnchor = anchor;
+
+        // The scroll extent must be updated before setting the new offset.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => RestoreViewportAnchor(anchor), Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private void TrackPendingExtent()
+    {
+        if (_pendingAnchor is { } anchor)
+        {
+            var maxOffset = Math.Max(0, anchor.Viewer.Extent.Height - anchor.Viewer.Viewport.Height);
+            anchor.MinimumMaxOffset = Math.Min(anchor.MinimumMaxOffset, maxOffset);
+        }
+    }
+
+    private void RestoreViewportAnchor(ViewportAnchor anchor)
+    {
+        if (!ReferenceEquals(_pendingAnchor, anchor))
+        {
+            return;
+        }
+
+        _pendingAnchor = null;
+        var items = Items;
+        var scrollViewer = this.GetVisualAncestors().OfType<ScrollViewer>().FirstOrDefault();
+        if (items is null || anchor.Index >= items.Count || !ReferenceEquals(items[anchor.Index], anchor.Item) ||
+            !ReferenceEquals(scrollViewer, anchor.Viewer) || scrollViewer is null ||
+            _layoutColumns == 0 || scrollViewer.Viewport.Height <= 0)
+        {
+            return;
+        }
+
+        var maxOffset = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+        var expectedOffset = Math.Min(anchor.Offset, Math.Min(anchor.MinimumMaxOffset, maxOffset));
+        if (Math.Abs(scrollViewer.Offset.Y - expectedOffset) > 0.5)
+        {
+            return;
+        }
+
+        var anchorY = (anchor.Index / _layoutColumns + anchor.RowFraction) * ItemHeight;
+        var target = anchorY - scrollViewer.Viewport.Height / 2;
+        scrollViewer.Offset = new Vector(scrollViewer.Offset.X, Math.Clamp(target, 0, maxOffset));
     }
 
     internal void RefreshVisibleItems()
@@ -81,6 +159,7 @@ public class VirtualizingUniformPanel : VirtualizingPanel
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        TrackPendingExtent();
         var items = Items;
         //System.Diagnostics.Debug.WriteLine($"[VUP] Measure items={items?.Count ?? -1} realized={_realizedContainers.Count} viewport={_viewport}");
         if (items == null || ItemContainerGenerator == null)
@@ -94,6 +173,14 @@ public class VirtualizingUniformPanel : VirtualizingPanel
 
         double baseWidth = double.IsInfinity(availableSize.Width) ? ItemWidth : availableSize.Width;
         int columns = Math.Max(1, (int)(baseWidth / ItemWidth));
+        if (_layoutColumns != columns || _layoutItemHeight != ItemHeight)
+        {
+            CaptureViewportAnchor();
+        }
+
+        _layoutColumns = columns;
+        _layoutWidth = baseWidth;
+        _layoutItemHeight = ItemHeight;
         int rows = (int)Math.Ceiling((double)items.Count / columns);
 
         double dynamicItemWidth = baseWidth / columns;

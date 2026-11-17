@@ -8,6 +8,8 @@ public interface IThumbnailGeneratorService
 
     Task ClearCacheAsync(MediaFile mediaFile, CancellationToken cancellationToken);
 
+    bool HasFailed(MediaFile mediaFile);
+
     Task<string?> GenerateAsync(MediaFile mediaFile, int thumbnailSize, CancellationToken cancellationToken) =>
         GenerateAsync(mediaFile, cancellationToken);
 }

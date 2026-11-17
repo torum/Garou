@@ -38,6 +38,86 @@ public sealed class ThumbnailTests
     }
 
     [Fact]
+    public async Task FailedGenerationIsSkippedForAllSizesUntilANewSession()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var directory = Path.Combine(Path.GetTempPath(), $"Garou-thumbs-{Guid.NewGuid():N}");
+        var ffmpeg = new FfmpegRunner(Path.Combine(Path.GetTempPath(), $"missing-ffmpeg-{Guid.NewGuid():N}"), TimeSpan.FromSeconds(5));
+        var repository = new FakeCacheRepository();
+        var generator = new ThumbnailGeneratorService(ffmpeg, repository, directory, TimeProvider.System);
+        var media = new MediaFile { Path = "photo.jpg", FileName = "photo.jpg", Extension = ".jpg", MediaType = MediaType.Image };
+        var other = new MediaFile { Path = "other.jpg", FileName = "other.jpg", Extension = ".jpg", MediaType = MediaType.Image };
+        var sourceDirectory = Path.Combine(directory, ThumbnailGeneratorService.ThumbnailFolderName(media.Path));
+
+        try
+        {
+            Assert.Null(await generator.GenerateAsync(media, 200, cancellationToken));
+            Assert.True(generator.HasFailed(media));
+            Assert.False(generator.HasFailed(other));
+            Directory.Delete(sourceDirectory);
+
+            await generator.ClearCacheAsync(media, cancellationToken);
+            Assert.Null(await generator.GenerateAsync(media, 320, cancellationToken));
+            Assert.False(Directory.Exists(sourceDirectory));
+            Assert.Empty(repository.Upserted);
+
+            Assert.Null(await generator.GenerateAsync(other, 200, cancellationToken));
+            Assert.True(Directory.Exists(sourceDirectory));
+            Directory.Delete(sourceDirectory);
+
+            var newSession = new ThumbnailGeneratorService(ffmpeg, repository, directory, TimeProvider.System);
+            Assert.False(newSession.HasFailed(media));
+            Assert.Null(await newSession.GenerateAsync(media, 200, cancellationToken));
+            Assert.True(Directory.Exists(sourceDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GenerationExceptionIsReportedOnceAndNotRetried()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var directory = Path.GetTempFileName();
+        var media = new MediaFile { Path = "photo.jpg", FileName = "photo.jpg", Extension = ".jpg", MediaType = MediaType.Image };
+        var generator = new ThumbnailGeneratorService(new FfmpegRunner("ffmpeg", TimeSpan.FromSeconds(5)), new FakeCacheRepository(), directory, TimeProvider.System);
+
+        try
+        {
+            await Assert.ThrowsAnyAsync<IOException>(() => generator.GenerateAsync(media, cancellationToken));
+            Assert.True(generator.HasFailed(media));
+            File.Delete(directory);
+            Assert.Null(await generator.GenerateAsync(media, cancellationToken));
+            Assert.False(Directory.Exists(directory));
+        }
+        finally
+        {
+            if (File.Exists(directory))
+                File.Delete(directory);
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CancellationDoesNotMarkGenerationAsFailed()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"Garou-thumbs-{Guid.NewGuid():N}");
+        var media = new MediaFile { Path = "photo.jpg", FileName = "photo.jpg", Extension = ".jpg", MediaType = MediaType.Image };
+        var generator = new ThumbnailGeneratorService(new FfmpegRunner("ffmpeg", TimeSpan.FromSeconds(5)), new FakeCacheRepository(), directory, TimeProvider.System);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => generator.GenerateAsync(media, cancellation.Token));
+
+        Assert.False(generator.HasFailed(media));
+        Assert.False(Directory.Exists(directory));
+    }
+
+    [Fact]
     public void WhenSizeIsSpecifiedThenArgumentsScaleToRequestedSize()
     {
         var media = new MediaFile { Path = "photo.jpg", FileName = "photo.jpg", Extension = ".jpg", MediaType = MediaType.Image };

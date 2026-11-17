@@ -76,6 +76,7 @@ public sealed class MainWindowStartupCursorTests
     {
         public Task<string?> GenerateAsync(MediaFile mediaFile, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
         public Task ClearCacheAsync(MediaFile mediaFile, CancellationToken cancellationToken) => Task.CompletedTask;
+        public bool HasFailed(MediaFile mediaFile) => false;
     }
 
     private sealed class StartupFolders(Folder folder) : IFolderRepository

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Garou.Domain.Abstractions;
@@ -13,6 +15,11 @@ public sealed class ThumbnailGeneratorService(
     TimeProvider timeProvider) : IThumbnailGeneratorService
 {
     private const int ThumbnailSize = 320;
+    private readonly ConcurrentDictionary<string, byte> _failedPaths = new(StringComparer.Ordinal);
+    // Striped locks prevent concurrent attempts for the same file without retaining a lock per file.
+    private readonly SemaphoreSlim[] _generationLocks = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
+
+    public bool HasFailed(MediaFile mediaFile) => _failedPaths.ContainsKey(mediaFile.Path);
 
     public async Task<string?> GenerateAsync(MediaFile mediaFile, CancellationToken cancellationToken)
     {
@@ -22,32 +29,61 @@ public sealed class ThumbnailGeneratorService(
     public async Task<string?> GenerateAsync(MediaFile mediaFile, int thumbnailSize, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(thumbnailSize);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        if (mediaFile.MediaType is not (MediaType.Image or MediaType.Video))
+        if (mediaFile.MediaType is not (MediaType.Image or MediaType.Video) || HasFailed(mediaFile))
         {
             return null;
         }
 
-        var sourceThumbnailDirectory = Path.Combine(thumbnailDirectory, ThumbnailFolderName(mediaFile.Path));
-        var thumbnailPath = Path.Combine(sourceThumbnailDirectory, ThumbnailFileName(mediaFile.Path, thumbnailSize));
-        if (File.Exists(thumbnailPath))
+        var generationLock = _generationLocks[(int)((uint)StringComparer.Ordinal.GetHashCode(mediaFile.Path) % (uint)_generationLocks.Length)];
+        await generationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
+            if (HasFailed(mediaFile))
+            {
+                return null;
+            }
+
+            var sourceThumbnailDirectory = Path.Combine(thumbnailDirectory, ThumbnailFolderName(mediaFile.Path));
+            var thumbnailPath = Path.Combine(sourceThumbnailDirectory, ThumbnailFileName(mediaFile.Path, thumbnailSize));
+            if (File.Exists(thumbnailPath))
+            {
+                await RegisterThumbnailAsync(thumbnailPath, cancellationToken).ConfigureAwait(false);
+                return thumbnailPath;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(sourceThumbnailDirectory);
+                var arguments = BuildArguments(mediaFile, thumbnailPath, thumbnailSize);
+                var succeeded = await ffmpeg.RunAsync(arguments, cancellationToken).ConfigureAwait(false);
+                if (!succeeded || !File.Exists(thumbnailPath))
+                {
+                    Debug.WriteLine($"[ThumbnailGeneratorService] Generation failed for '{mediaFile.Path}'.");
+                    _failedPaths.TryAdd(mediaFile.Path, 0);
+                    File.Delete(thumbnailPath);
+                    return null;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                File.Delete(thumbnailPath);
+                throw;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                _failedPaths.TryAdd(mediaFile.Path, 0);
+                throw;
+            }
+
             await RegisterThumbnailAsync(thumbnailPath, cancellationToken).ConfigureAwait(false);
             return thumbnailPath;
         }
-
-        Directory.CreateDirectory(sourceThumbnailDirectory);
-
-        var arguments = BuildArguments(mediaFile, thumbnailPath, thumbnailSize);
-        var succeeded = await ffmpeg.RunAsync(arguments, cancellationToken).ConfigureAwait(false);
-        if (!succeeded || !File.Exists(thumbnailPath))
+        finally
         {
-            return null;
+            generationLock.Release();
         }
-
-        await RegisterThumbnailAsync(thumbnailPath, cancellationToken).ConfigureAwait(false);
-
-        return thumbnailPath;
     }
 
     private Task RegisterThumbnailAsync(string thumbnailPath, CancellationToken cancellationToken) =>

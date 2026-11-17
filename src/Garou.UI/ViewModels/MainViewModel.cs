@@ -884,7 +884,14 @@ public partial class MainViewModel(
                         !thumbnailPath.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ||
                         !File.Exists(thumbnailPath))
                     {
-                        staleFiles.Add(file);
+                        if (thumbnailGenerator.HasFailed(file))
+                        {
+                            SetThumbnailState(file.Id, ThumbnailLoadState.Failed);
+                        }
+                        else
+                        {
+                            staleFiles.Add(file);
+                        }
                     }
                 }
 
@@ -909,6 +916,7 @@ public partial class MainViewModel(
                         (file, _) => thumbnailGenerator.GenerateAsync(file, thumbnailSize, CancellationToken.None),
                         CancellationToken.None,
                         () => IsVisibleThumbnailVersionCurrent(observedVersion));
+                    ThumbnailStatusText = string.Empty;
                 }
                 finally
                 {
@@ -917,7 +925,6 @@ public partial class MainViewModel(
 
                 if (IsVisibleThumbnailVersionCurrent(observedVersion))
                 {
-                    ThumbnailStatusText = "Finished generating visible thumbnails";
                     break;
                 }
             }
