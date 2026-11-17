@@ -9,9 +9,12 @@ public sealed class XnfoStore
 {
     public string GetPath(string mediaPath) => mediaPath + ".xnfo";
 
-    public async Task<XnfoMetadata?> LoadAsync(string mediaPath, CancellationToken cancellationToken)
+    public Task<XnfoMetadata?> LoadAsync(string mediaPath, CancellationToken cancellationToken) =>
+        LoadFromPathAsync(GetPath(mediaPath), discovered: false, cancellationToken);
+
+    internal async Task<XnfoMetadata?> LoadFromPathAsync(string sidecarPath, bool discovered, CancellationToken cancellationToken)
     {
-        var document = await ReadAsync(GetPath(mediaPath), cancellationToken);
+        var document = await ReadAsync(sidecarPath, cancellationToken, discovered);
         if (document is null)
         {
             return null;
@@ -115,10 +118,10 @@ public sealed class XnfoStore
     internal static FileStream OpenRead(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 4096, FileOptions.Asynchronous);
 
-    private static async Task<XDocument?> ReadAsync(string path, CancellationToken cancellationToken)
+    private static async Task<XDocument?> ReadAsync(string path, CancellationToken cancellationToken, bool discovered = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!File.Exists(path) && !SidecarEntryExists(path))
+        if (!discovered && !File.Exists(path) && !SidecarEntryExists(path))
         {
             return null;
         }

@@ -263,7 +263,7 @@
   <data name="ScanIndexingMetadata" xml:space="preserve"><value>関連メタデータをインデックスしています</value></data>
   <data name="ScanRemovingStale" xml:space="preserve"><value>古い項目を削除しています</value></data>
   <data name="ScanRefreshingTitle" xml:space="preserve"><value>ライブラリ表示を更新しています</value></data>
-  <data name="ScanRefreshing" xml:space="preserve"><value>{0}のフォルダーとメディアを読み込んでいます...</value></data>
+  <data name="ScanRefreshing" xml:space="preserve"><value>フォルダーツリーと選択中のフォルダーのメディアを更新しています...</value></data>
   <data name="ScanCount" xml:space="preserve"><value>{0} — {1:N0} / {2:N0}</value></data>
   <data name="ScanBusy" xml:space="preserve"><value>現在のライブラリ処理が終了するまでお待ちください。</value></data>
   <data name="ScanFailed" xml:space="preserve"><value>{0}のスキャンまたは更新に失敗しました: {1}</value></data>

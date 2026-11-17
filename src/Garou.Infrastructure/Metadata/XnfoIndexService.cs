@@ -38,26 +38,58 @@ public sealed class XnfoIndexService(XnfoStore store, SqliteConnectionFactory co
         IndexingError?.Invoke(message);
     }
 
-    internal async Task SyncScanAsync(IReadOnlyList<string> mediaPaths, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
+    internal async Task SyncScanAsync(string rootPath, IReadOnlySet<string> inspectableFiles,
+        IReadOnlyList<(string MediaPath, string SidecarPath)> sidecars, IReadOnlySet<string> uninspectableSidecars,
+        IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
     {
-        if (mediaPaths.Count == 0)
+        if (inspectableFiles.Count == 0)
             return;
 
         var processed = 0;
         var lastReported = System.Diagnostics.Stopwatch.GetTimestamp();
         await using var connection = await connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
-        foreach (var paths in mediaPaths.Chunk(ScanBatchSize))
+        var observed = sidecars.Select(sidecar => sidecar.MediaPath)
+            .ToHashSet(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        observed.UnionWith(uninspectableSidecars);
+        var missing = new List<string>();
+        var prefix = rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT MediaFile.Path FROM XnfoMetadata
+                INNER JOIN MediaFile ON MediaFile.Id = XnfoMetadata.MediaFileId
+                WHERE substr(MediaFile.Path, 1, length($prefix)) = $prefix;
+                """;
+            command.AddValue("$prefix", prefix);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var path = reader.GetString(0);
+                if (inspectableFiles.Contains(path) && !observed.Contains(path))
+                    missing.Add(path);
+            }
+        }
+
+        foreach (var paths in missing.Chunk(ScanBatchSize))
+        {
+            await using var transaction = connection.BeginTransaction();
+            foreach (var path in paths)
+                await SyncMetadataAsync(connection, transaction, path, null, cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var paths in sidecars.Chunk(ScanBatchSize))
         {
             var loaded = new List<(string Path, XnfoMetadata? Metadata)>(paths.Length);
-            foreach (var path in paths)
+            foreach (var (mediaPath, sidecarPath) in paths)
             {
                 try
                 {
-                    loaded.Add((path, await store.LoadAsync(path, cancellationToken).ConfigureAwait(false)));
+                    loaded.Add((mediaPath, await store.LoadFromPathAsync(sidecarPath, discovered: true, cancellationToken).ConfigureAwait(false)));
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Xml.XmlException or InvalidOperationException or NotSupportedException)
                 {
-                    ReportIndexingError(path, exception);
+                    ReportIndexingError(mediaPath, exception);
                 }
             }
 
@@ -76,10 +108,10 @@ public sealed class XnfoIndexService(XnfoStore store, SqliteConnectionFactory co
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             processed += paths.Length;
             var now = System.Diagnostics.Stopwatch.GetTimestamp();
-            if (processed == mediaPaths.Count || System.Diagnostics.Stopwatch.GetElapsedTime(lastReported, now) >= TimeSpan.FromMilliseconds(200))
+            if (processed == sidecars.Count || System.Diagnostics.Stopwatch.GetElapsedTime(lastReported, now) >= TimeSpan.FromMilliseconds(200))
             {
                 lastReported = now;
-                progress?.Report(new ScanProgress("ScanIndexingMetadata", processed, mediaPaths.Count));
+                progress?.Report(new ScanProgress("ScanIndexingMetadata", processed, sidecars.Count));
             }
         }
     }

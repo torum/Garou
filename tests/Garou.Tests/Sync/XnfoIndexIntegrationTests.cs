@@ -42,6 +42,8 @@ public sealed class XnfoIndexIntegrationTests
                 Description = "Plot", Comments = "Note", CoverArt = "cover.jpg"
             };
             await store.SaveAsync(mediaPath, metadata, ct);
+            await File.WriteAllTextAsync(Path.Combine(libraryRoot, "orphan.mp4.xnfo"), "<xnfo>", ct);
+            var progress = new RecordingProgress();
             var missingExceptions = 0;
             void OnFirstChanceException(object? sender, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs args)
             {
@@ -51,13 +53,15 @@ public sealed class XnfoIndexIntegrationTests
             AppDomain.CurrentDomain.FirstChanceException += OnFirstChanceException;
             try
             {
-                await indexer.ScanAsync(library, null, ct);
+                await indexer.ScanAsync(library, progress, ct);
             }
             finally
             {
                 AppDomain.CurrentDomain.FirstChanceException -= OnFirstChanceException;
             }
             Assert.Equal(0, Volatile.Read(ref missingExceptions));
+            Assert.Contains(new ScanProgress("ScanIndexingMetadata", 1, 1), progress.Values);
+            Assert.Null(index.LastError);
             Assert.NotNull(await media.GetByPathAsync(otherMediaPath, ct));
             var file = await media.GetByPathAsync(mediaPath, ct);
             Assert.NotNull(file);
@@ -130,9 +134,11 @@ public sealed class XnfoIndexIntegrationTests
             var unindexedPath = Path.Combine(libraryRoot, "unindexed.mp4");
             await store.SaveAsync(unindexedPath, new XnfoMetadata { Title = "Unindexed" }, ct);
             await Assert.ThrowsAsync<InvalidOperationException>(() => index.SyncAsync(unindexedPath, ct));
-            var paths = Enumerable.Repeat(unindexedPath, 200).Append(otherMediaPath).ToArray();
+            var paths = Enumerable.Repeat((unindexedPath, store.GetPath(unindexedPath)), 200)
+                .Append((otherMediaPath, store.GetPath(otherMediaPath))).ToArray();
             await store.SaveAsync(otherMediaPath, new XnfoMetadata { Title = "Later batch" }, ct);
-            await index.SyncScanAsync(paths, null, ct);
+            await index.SyncScanAsync(libraryRoot, new HashSet<string> { unindexedPath, otherMediaPath }, paths,
+                new HashSet<string>(), null, ct);
             var laterQuery = new MediaQuery(null, "Later batch", MediaTypeFilter.Any, MediaSortField.Id, false, Guid.Empty, 20);
             Assert.Single(await media.SearchAsync(MediaQueryBuilder.BuildAll(laterQuery), ct));
             Assert.Contains(unindexedPath, index.LastError);
@@ -142,5 +148,60 @@ public sealed class XnfoIndexIntegrationTests
             SqliteConnection.ClearAllPools();
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task IncompleteDirectoryEnumerationPreservesIndexedMetadata()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"Garou-xnfo-unreadable-{Guid.NewGuid():N}");
+        var libraryRoot = Path.Combine(root, "library");
+        var folder = Path.Combine(libraryRoot, "folder");
+        Directory.CreateDirectory(folder);
+        var mediaPath = Path.Combine(folder, "movie.mp4");
+        await File.WriteAllBytesAsync(mediaPath, [1, 2, 3], ct);
+        var factory = new SqliteConnectionFactory(new SqliteConnectionStringBuilder { DataSource = Path.Combine(root, "library.db") }.ToString());
+        try
+        {
+            await new DatabaseInitializer(factory).InitializeAsync(ct);
+            var store = new XnfoStore();
+            var index = new XnfoIndexService(store, factory);
+            var media = new MediaFileRepository(factory);
+            var indexer = new MediaIndexerService(new FileWatcherService(), new LibraryRepository(factory), media,
+                new FolderRepository(factory), new LibraryExcludedFolderRepository(factory), new LibraryOperationGate(),
+                new AppSettingsSession(), TimeProvider.System, index);
+            var library = new LibraryDefinition { RootPath = libraryRoot };
+            await store.SaveAsync(mediaPath, new XnfoMetadata { Title = "Retained title" }, ct);
+            await indexer.ScanAsync(library, null, ct);
+            File.Delete(store.GetPath(mediaPath));
+            indexer.EnumerateDirectoryEntries = path => path == folder
+                ? EnumerateThenFail(mediaPath)
+                : Directory.EnumerateFileSystemEntries(path);
+
+            await indexer.ScanAsync(library, null, ct);
+
+            var query = new MediaQuery(null, "Retained title", MediaTypeFilter.Any, MediaSortField.Id, false, Guid.Empty, 20);
+            Assert.Single(await media.SearchAsync(MediaQueryBuilder.BuildAll(query), ct));
+            indexer.EnumerateDirectoryEntries = Directory.EnumerateFileSystemEntries;
+            await indexer.ScanAsync(library, null, ct);
+            Assert.Empty(await media.SearchAsync(MediaQueryBuilder.BuildAll(query), ct));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateThenFail(string path)
+    {
+        yield return path;
+        throw new IOException("Enumeration failed");
+    }
+
+    private sealed class RecordingProgress : IProgress<ScanProgress>
+    {
+        public List<ScanProgress> Values { get; } = [];
+        public void Report(ScanProgress value) => Values.Add(value);
     }
 }

@@ -1456,7 +1456,7 @@ public partial class MainViewModel(
             if (version == _scanVersion)
             {
                 ScanInfoTitle = Localize("ScanRefreshingTitle");
-                ScanInfoMessage = string.Format(Localize("ScanRefreshing"), path);
+                ScanInfoMessage = Localize("ScanRefreshing");
             }
             await RunScanRefreshAsync(() => refresh(token), token);
         }
@@ -1539,7 +1539,7 @@ public partial class MainViewModel(
             _offlineLibraryPaths.Remove(Path.TrimEndingDirectorySeparator(path));
             StartFolderAvailabilityChecks();
             ScanInfoTitle = Localize("ScanRefreshingTitle");
-            ScanInfoMessage = string.Format(Localize("ScanRefreshing"), path);
+            ScanInfoMessage = Localize("ScanRefreshing");
             await RunScanRefreshAsync(() => RefreshTreeAndSelectionAsync(_lifetimeCts.Token), _lifetimeCts.Token);
         }
         catch (OperationCanceledException) when (_lifetimeCts.IsCancellationRequested) { }

@@ -430,6 +430,67 @@ public sealed class SyncTests
     }
 
     [Fact]
+    public async Task WhenWatcherReportsRepeatedDirectoryModificationsThenLibraryIsNotRescanned()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"directory-modifications-{Guid.NewGuid():N}");
+        var directory = Path.Combine(root, "existing");
+        Directory.CreateDirectory(directory);
+        using var stop = new CancellationTokenSource();
+        var library = new LibraryDefinition { RootPath = root, IsEnabled = true };
+        var watcher = new ScriptedWatcher(() => { },
+        [
+            new FileChangeEvent { LibraryRoot = root, FullPath = directory, Kind = FileChangeKind.Modified },
+            new FileChangeEvent { LibraryRoot = root, FullPath = directory, Kind = FileChangeKind.Modified }
+        ], stop);
+        var service = CreateService(new FakeMediaFileRepository(), watcher, library);
+        var scans = 0;
+        service.AutomaticScanStarted += _ => scans++;
+
+        try
+        {
+            await service.RunAsync(stop.Token);
+
+            Assert.Equal(1, scans);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenWatcherReportsNewDirectoryThenExistingFilesInItAreIndexed()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"directory-created-{Guid.NewGuid():N}");
+        var directory = Path.Combine(root, "new");
+        var file = Path.Combine(directory, "photo.jpg");
+        Directory.CreateDirectory(root);
+        using var stop = new CancellationTokenSource();
+        var library = new LibraryDefinition { RootPath = root, IsEnabled = true };
+        var watcher = new ScriptedWatcher(() =>
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllBytes(file, [1, 2, 3]);
+        }, [new FileChangeEvent { LibraryRoot = root, FullPath = directory, Kind = FileChangeKind.Created }], stop);
+        var repository = new FakeMediaFileRepository();
+        var service = CreateService(repository, watcher, library);
+        var scans = 0;
+        service.AutomaticScanStarted += _ => scans++;
+
+        try
+        {
+            await service.RunAsync(stop.Token);
+
+            Assert.Equal(2, scans);
+            Assert.Equal(file, Assert.Single(repository.Upserted).Path);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task WhenAutomaticLibraryIsUnavailableThenCompletionReportsOffline()
     {
         var root = Path.Combine(Path.GetTempPath(), $"missing-automatic-{Guid.NewGuid():N}");
@@ -546,6 +607,68 @@ public sealed class SyncTests
         {
             yield return partialEntry;
             throw new UnauthorizedAccessException("Permission denied");
+        }
+    }
+
+    [Theory]
+    [InlineData("lost+found")]
+    [InlineData("System Volume Information")]
+    [InlineData("private")]
+    public async Task WhenFolderEnumerationIsDeniedThenNoIssueIsReportedAndRecordsArePreserved(string folderName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"denied-scan-{Guid.NewGuid():N}");
+        var deniedFolder = Path.Combine(root, folderName);
+        Directory.CreateDirectory(deniedFolder);
+        var retainedFile = Path.Combine(deniedFolder, "retained.jpg");
+        var repository = new FakeMediaFileRepository();
+        repository.StoredPaths.Add(retainedFile);
+        var service = CreateScanService(repository);
+        service.EnumerateDirectoryEntries = path => path == deniedFolder
+            ? throw new UnauthorizedAccessException("Permission denied")
+            : Directory.EnumerateFileSystemEntries(path);
+        var issues = new List<(string Path, int Count, string Example)>();
+        service.ItemsSkipped += (path, count, example) => issues.Add((path, count, example));
+
+        try
+        {
+            await service.ScanAsync(new LibraryDefinition { RootPath = root }, null, TestContext.Current.CancellationToken);
+
+            Assert.Empty(issues);
+            Assert.Empty(repository.DeletedPaths);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WhenFoldersHaveDifferentEnumerationFailuresThenOnlyIoFailuresAreReported()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mixed-unreadable-scan-{Guid.NewGuid():N}");
+        var denied = Path.Combine(root, "private");
+        var other = Path.Combine(root, "other");
+        Directory.CreateDirectory(denied);
+        Directory.CreateDirectory(other);
+        var repository = new FakeMediaFileRepository();
+        var service = CreateScanService(repository);
+        service.EnumerateDirectoryEntries = path => path == denied
+            ? throw new UnauthorizedAccessException("Permission denied")
+            : path == other
+                ? throw new IOException("I/O error")
+                : Directory.EnumerateFileSystemEntries(path);
+        var issues = new List<(string Path, int Count, string Example)>();
+        service.ItemsSkipped += (path, count, example) => issues.Add((path, count, example));
+
+        try
+        {
+            await service.ScanAsync(new LibraryDefinition { RootPath = root }, null, TestContext.Current.CancellationToken);
+
+            Assert.Equal((root, 1, other), Assert.Single(issues));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
         }
     }
 

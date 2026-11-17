@@ -23,6 +23,8 @@ public sealed class MediaIndexerService(
 {
     private const int BatchSize = 200;
     private static readonly TimeSpan OfflineRetryInterval = TimeSpan.FromSeconds(30);
+    private static readonly StringComparison SidecarPathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+    private static readonly StringComparer SidecarPathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     public event Action<string>? AutomaticScanStarted;
     public event Action<ScanProgress>? AutomaticScanProgress;
@@ -139,6 +141,8 @@ public sealed class MediaIndexerService(
         progress?.Report(new ScanProgress("ScanEnumerating", 0, 0));
         var excludedPaths = await excludedFolders.GetPathsAsync(library.Id, cancellationToken).ConfigureAwait(false);
         var files = new List<string>();
+        var sidecars = new List<string>();
+        var uninspectableSidecars = new HashSet<string>(SidecarPathComparer);
         var unreadableDirectories = new List<string>();
         var skippedEntries = new List<string>();
         var pendingDirectories = new Stack<string>();
@@ -161,18 +165,28 @@ public sealed class MediaIndexerService(
                     try
                     {
                         var attributes = File.GetAttributes(path);
+                        isDirectory = (attributes & FileAttributes.Directory) != 0;
                         if ((attributes & FileAttributes.ReparsePoint) != 0)
                         {
+                            if (!isDirectory && path.EndsWith(".xnfo", SidecarPathComparison))
+                            {
+                                sidecars.Add(path);
+                            }
                             continue;
                         }
-
-                        isDirectory = (attributes & FileAttributes.Directory) != 0;
                     }
                     catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
                     {
                         // An entry that vanished or is unreadable must not abort the rest of its folder.
                         System.Diagnostics.Debug.WriteLine($"Could not read entry '{path}': {exception.Message}");
-                        skippedEntries.Add(path);
+                        if (path.EndsWith(".xnfo", SidecarPathComparison))
+                        {
+                            uninspectableSidecars.Add(path[..^5]);
+                        }
+                        if (exception is not UnauthorizedAccessException)
+                        {
+                            skippedEntries.Add(path);
+                        }
 
                         continue;
                     }
@@ -183,6 +197,10 @@ public sealed class MediaIndexerService(
                         {
                             pendingDirectories.Push(path);
                         }
+                    }
+                    else if (path.EndsWith(".xnfo", SidecarPathComparison))
+                    {
+                        sidecars.Add(path);
                     }
                     else if (IsSupported(Path.GetExtension(path)))
                     {
@@ -205,10 +223,13 @@ public sealed class MediaIndexerService(
                     library.IsOnline = false;
                     return;
                 }
+                if (exception is not UnauthorizedAccessException)
+                {
+                    skippedEntries.Add(directory);
+                }
             }
         }
 
-        skippedEntries.AddRange(unreadableDirectories);
         if (skippedEntries.Count > 0)
         {
             ItemsSkipped?.Invoke(library.RootPath, skippedEntries.Count, skippedEntries[0]);
@@ -362,8 +383,17 @@ public sealed class MediaIndexerService(
         if (xnfoIndex is not null)
         {
             progress?.Report(new ScanProgress("ScanIndexingMetadata", 0, 0));
-            var inspectableFiles = files.Where(path => !uninspectableFiles.ContainsKey(path) && !IsUnderUnreadableDirectory(path)).ToList();
-            await xnfoIndex.SyncScanAsync(inspectableFiles, progress, cancellationToken).ConfigureAwait(false);
+            var inspectableFiles = files.Where(path => !uninspectableFiles.ContainsKey(path) && !IsUnderUnreadableDirectory(path))
+                .ToHashSet(SidecarPathComparer);
+            var discoveredSidecars = new List<(string MediaPath, string SidecarPath)>();
+            foreach (var sidecar in sidecars)
+            {
+                if (inspectableFiles.TryGetValue(sidecar[..^5], out var mediaPath))
+                {
+                    discoveredSidecars.Add((mediaPath, sidecar));
+                }
+            }
+            await xnfoIndex.SyncScanAsync(library.RootPath, inspectableFiles, discoveredSidecars, uninspectableSidecars, progress, cancellationToken).ConfigureAwait(false);
         }
 
         progress?.Report(new ScanProgress("ScanRemovingStale", 0, 0));
@@ -445,7 +475,10 @@ public sealed class MediaIndexerService(
             default:
                 if (Directory.Exists(change.FullPath))
                 {
-                    await RunAutomaticScanAsync(library, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
+                    if (change.Kind == FileChangeKind.Created)
+                    {
+                        await RunAutomaticScanAsync(library, clearSuppressedPaths: false, cancellationToken).ConfigureAwait(false);
+                    }
                 }
                 else
                 {
