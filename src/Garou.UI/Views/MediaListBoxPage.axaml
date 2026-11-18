@@ -28,15 +28,6 @@
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
 
-                    <ComboBox Width="130" VerticalAlignment="Center" ItemsSource="{Binding Settings.MediaSortOptions}" SelectedItem="{Binding SelectedMediaSortOption, Mode=TwoWay}" AutomationProperties.Name="{Binding Settings.SortFieldLabel}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:MediaSortOption">
-                                <TextBlock Text="{Binding Label}" />
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <ToggleButton Content="{Binding Settings.SortDescendingLabel}" IsChecked="{Binding IsSortDescending, Mode=TwoWay}" AutomationProperties.Name="{Binding Settings.SortDirectionLabel}" VerticalAlignment="Center" />
-
                     <ComboBox x:Name="SearchFieldSelector" Width="150" ItemsSource="{Binding Settings.SearchFieldOptions}" SelectedItem="{Binding SelectedSearchField, Mode=TwoWay}" AutomationProperties.Name="{Binding Settings.SearchFieldLabel}" VerticalAlignment="Center">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:SearchFieldOption">
@@ -236,11 +227,7 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                
-                    <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="0,0,6,0" />
-
-                    <Slider Minimum="80" Maximum="320" TickFrequency="10" IsSnapToTickEnabled="True" Width="150" Value="{Binding ThumbnailSize, Mode=TwoWay}" x:Name="ThumbnailSizeSlider" />
-
+                    
                     <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="6,0,0,0" />
 
                     <ToggleButton x:Name="ShowFileNamesToggleButton" ToolTip.Placement="TopEdgeAlignedLeft" ToolTip.VerticalOffset="-6" IsChecked="{Binding ShowFileNames, Mode=TwoWay}" BorderThickness="0" Width="39" Height="36" Margin="6,0,0,0">
@@ -278,6 +265,22 @@
                             <PathIcon Background="Transparent" Width="NaN" Height="NaN" Data="{StaticResource AudioIcon}"></PathIcon>
                         </Viewbox>
                     </ToggleButton>
+
+                    <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="6,0,0,0" />
+
+                    <ComboBox Width="130" Margin="6,0,0,0" VerticalAlignment="Center" ItemsSource="{Binding Settings.MediaSortOptions}" SelectedItem="{Binding SelectedMediaSortOption, Mode=TwoWay}" AutomationProperties.Name="{Binding Settings.SortFieldLabel}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MediaSortOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ToggleButton Margin="6,0,0,0" Content="{Binding Settings.SortDescendingLabel}" IsChecked="{Binding IsSortDescending, Mode=TwoWay}" AutomationProperties.Name="{Binding Settings.SortDirectionLabel}" VerticalAlignment="Center" />
+                
+                    <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="6,0,0,0" />
+
+                    <Slider Minimum="80" Maximum="320" TickFrequency="10" IsSnapToTickEnabled="True" Width="150" Margin="6,0,0,0" Value="{Binding ThumbnailSize, Mode=TwoWay}" x:Name="ThumbnailSizeSlider" />
+
                         
                     <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Margin="6,0,0,0" />
 
