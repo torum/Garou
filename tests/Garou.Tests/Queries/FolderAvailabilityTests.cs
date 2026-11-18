@@ -1,11 +1,17 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Garou.Application.Queries;
 using Garou.Domain.Abstractions;
 using Garou.Domain.Entities;
 using Garou.Domain.Enums;
 using Garou.Domain.Models;
 using Garou.Infrastructure.Settings;
+using Garou.UI.Views;
 using Garou.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Garou.Tests.Queries;
 
@@ -34,6 +40,69 @@ public sealed class FolderAvailabilityTests
         Assert.Contains("unavailable", viewModel.StatusText);
         Assert.False(viewModel.IsInfoBarOpen);
         Assert.False(await viewModel.IsMediaAvailableAsync(media, CancellationToken.None));
+    }
+
+    [AvaloniaFact]
+    public async Task ExplicitAvailabilityCheckReportsMissingMediaInInfoBar()
+    {
+        var folder = new Folder { Path = Path.Combine(Path.GetTempPath(), $"Garou-missing-{Guid.NewGuid():N}") };
+        using var viewModel = CreateViewModel([folder], new RecordingMetadata());
+        await viewModel.LoadFolderTreeAsync(CancellationToken.None);
+        var media = new MediaFile { FolderId = folder.Id, Path = Path.Combine(folder.Path, "missing.jpg"), FileName = "missing.jpg", Extension = ".jpg", MediaType = MediaType.Image };
+        viewModel.StatusText = "Existing status";
+
+        Assert.False(await viewModel.IsMediaAvailableAsync(media, CancellationToken.None, reportError: true));
+
+        Assert.True(viewModel.IsInfoBarOpen);
+        Assert.Equal(viewModel.Settings.ErrorTitle, viewModel.InfoBarErrorTitle);
+        Assert.Equal("missing.jpg is unavailable. Its drive, folder, or file may be missing.", viewModel.InfoBarErrorMessage);
+        Assert.Equal("Existing status", viewModel.StatusText);
+        Assert.False(Assert.Single(viewModel.FolderTree).IsAvailable);
+    }
+
+    [AvaloniaFact]
+    public async Task DoubleTappingMissingMediaOpensErrorInfoBar()
+    {
+        var previousServices = App.Services;
+        var session = new AppSettingsSession();
+        using var viewModel = new MainViewModel(null!, null!, null!, new SettingsViewModel(session), session,
+            null!, null!, null!, null!, null!, null!);
+        using var services = new ServiceCollection().AddSingleton(session).AddSingleton(viewModel).BuildServiceProvider();
+        App.Services = services;
+        var window = new Window { Width = 900, Height = 600 };
+        try
+        {
+            var page = new MediaListBoxPage();
+            window.Content = page;
+            window.Show();
+            var media = new MediaFile { Path = Path.Combine(Path.GetTempPath(), $"Garou-missing-{Guid.NewGuid():N}.jpg"), FileName = "missing.jpg", Extension = ".jpg", MediaType = MediaType.Unknown };
+            var item = new MediaItemViewModel(media);
+            viewModel.Items.Add(item);
+            viewModel.SelectedItem = item;
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            viewModel.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(MainViewModel.IsInfoBarOpen) && viewModel.IsInfoBarOpen)
+                    completion.TrySetResult();
+            };
+            var list = Assert.IsType<ListBox>(page.FindControl<ListBox>("MediaListBox"));
+            window.UpdateLayout();
+            var container = Assert.IsAssignableFrom<Control>(list.ContainerFromItem(item));
+            var position = Assert.IsType<Point>(container.TranslatePoint(new Point(10, 10), window));
+            window.MouseDown(position, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(position, MouseButton.Left, RawInputModifiers.None);
+            window.MouseDown(position, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(position, MouseButton.Left, RawInputModifiers.None);
+            await completion.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal(viewModel.Settings.ErrorTitle, viewModel.InfoBarErrorTitle);
+            Assert.Equal("missing.jpg is unavailable. Its drive, folder, or file may be missing.", viewModel.InfoBarErrorMessage);
+        }
+        finally
+        {
+            window.Close();
+            App.Services = previousServices;
+        }
     }
 
     [AvaloniaFact]

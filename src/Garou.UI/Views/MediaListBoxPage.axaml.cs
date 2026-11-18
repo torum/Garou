@@ -115,7 +115,7 @@ public partial class MediaListBoxPage : UserControl
         var path = item.File.Path;
         try
         {
-            if (!await viewModel.IsMediaAvailableAsync(item.File, viewModel.LifetimeToken))
+            if (!await viewModel.IsMediaAvailableAsync(item.File, viewModel.LifetimeToken, reportError: true))
                 return;
             var metadata = await viewModel.LoadXnfoAsync(path, viewModel.LifetimeToken) ?? new XnfoMetadata();
             var edited = await XnfoEditorDialog.ShowAsync(owner, path, metadata, _settingsSession.Current.Language);
@@ -202,7 +202,7 @@ public partial class MediaListBoxPage : UserControl
     {
         try
         {
-            if (!await viewModel.IsMediaAvailableAsync(mediaFile, viewModel.LifetimeToken))
+            if (!await viewModel.IsMediaAvailableAsync(mediaFile, viewModel.LifetimeToken, reportError: true))
                 return;
             Process.Start(new ProcessStartInfo(mediaFile.Path)
             {
@@ -260,7 +260,7 @@ public partial class MediaListBoxPage : UserControl
 
         try
         {
-            if (!await viewModel.IsMediaAvailableAsync(mediaFile, viewModel.LifetimeToken))
+            if (!await viewModel.IsMediaAvailableAsync(mediaFile, viewModel.LifetimeToken, reportError: true))
                 return;
             if (!File.Exists(applicationPath))
             {

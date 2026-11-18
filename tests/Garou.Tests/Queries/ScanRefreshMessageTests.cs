@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Garou.Application.Libraries;
 using Garou.Application.Queries;
 using Garou.Domain.Abstractions;
@@ -18,7 +19,7 @@ namespace Garou.Tests.Queries;
 public sealed class ScanRefreshMessageTests
 {
     [AvaloniaFact]
-    public async Task AutomaticScanOfUnavailableLibraryDoesNotShowErrorInfoBar()
+    public async Task OfflineRetriesAndRecoveryDoNotShowScanInfoBar()
     {
         var root = Path.Combine(Path.GetTempPath(), $"Garou-offline-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -38,23 +39,54 @@ public sealed class ScanRefreshMessageTests
             var session = new AppSettingsSession();
             session.Initialize(new AppSettings());
             var gate = new LibraryOperationGate();
-            var indexer = new MediaIndexerService(new FileWatcherService(), libraries, media, folders, excluded, gate, session, TimeProvider.System);
-            using var viewModel = new MainViewModel(new MediaQueryService(media, media, folders),
+            var indexer = new MediaIndexerService(new FileWatcherService(), libraries, media, folders, excluded, gate, session, TimeProvider.System)
+            {
+                RetryInterval = TimeSpan.FromMilliseconds(50)
+            };
+            var gatedFolders = new GatedFolders(folders);
+            using var viewModel = new MainViewModel(new MediaQueryService(media, media, gatedFolders),
                 new LibraryCommands(libraries, excluded, indexer), gate, new SettingsViewModel(session), session,
                 null!, media, folders, null!, new XnfoIndexService(new XnfoStore(), factory), indexer);
             await viewModel.InitializeAsync(ct);
 
             var automaticFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var retriesFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var retryCount = 0;
+            var infoBarOpens = 0;
             viewModel.PropertyChanged += (_, args) =>
             {
                 if (args.PropertyName == nameof(MainViewModel.IsScanning) && !viewModel.IsScanning)
                     automaticFinished.TrySetResult();
+                if (args.PropertyName == nameof(MainViewModel.IsScanInfoOpen) && viewModel.IsScanInfoOpen)
+                    infoBarOpens++;
+            };
+            indexer.AutomaticScanFinished += (_, online, _, isRetry) =>
+            {
+                if (isRetry && !online && Interlocked.Increment(ref retryCount) >= 2)
+                    retriesFinished.TrySetResult();
             };
             automaticScan = Task.Run(() => indexer.RunAsync(stop.Token));
             await automaticFinished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(1, infoBarOpens);
+            await retriesFinished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Dispatcher.UIThread.InvokeAsync(() => { });
 
+            Assert.Equal(1, infoBarOpens);
+            Assert.False(viewModel.IsScanInfoOpen);
             Assert.False(viewModel.IsInfoBarOpen);
             Assert.Empty(viewModel.InfoBarErrorMessage);
+
+            var folderRestored = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            viewModel.FolderRestored += _ => folderRestored.TrySetResult();
+            gatedFolders.BlockNext();
+            Directory.CreateDirectory(unavailablePath);
+            await gatedFolders.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(1, infoBarOpens);
+            Assert.False(viewModel.IsScanInfoOpen);
+            Assert.False(viewModel.IsScanning);
+            gatedFolders.Release.TrySetResult();
+            await folderRestored.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(unavailablePath, Assert.Single(viewModel.FolderTree).PathText);
         }
         finally
         {

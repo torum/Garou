@@ -28,7 +28,7 @@ public sealed class MediaIndexerService(
 
     public event Action<string>? AutomaticScanStarted;
     public event Action<ScanProgress>? AutomaticScanProgress;
-    public event Action<string, bool, Exception?>? AutomaticScanFinished;
+    public event Action<string, bool, Exception?, bool>? AutomaticScanFinished;
     public event Action<string, string>? IndexingIssue;
     public event Action<string, int, string>? ItemsSkipped;
 
@@ -63,7 +63,7 @@ public sealed class MediaIndexerService(
                     scanning = true;
                     using (await operationGate.EnterAsync(cancellationToken).ConfigureAwait(false))
                     {
-                        await RunAutomaticScanAsync(library, clearSuppressedPaths: true, cancellationToken).ConfigureAwait(false);
+                        await RunAutomaticScanAsync(library, clearSuppressedPaths: true, cancellationToken, isOfflineRetry: !library.IsOnline).ConfigureAwait(false);
                     }
                     scanning = false;
                     if (!library.IsOnline)
@@ -136,13 +136,14 @@ public sealed class MediaIndexerService(
         await ScanCoreAsync(library, progress, clearSuppressedPaths: true, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task RunAutomaticScanAsync(LibraryDefinition library, bool clearSuppressedPaths, CancellationToken cancellationToken, Func<Task>? afterScan = null)
+    private async Task RunAutomaticScanAsync(LibraryDefinition library, bool clearSuppressedPaths, CancellationToken cancellationToken, Func<Task>? afterScan = null, bool isOfflineRetry = false)
     {
-        AutomaticScanStarted?.Invoke(library.RootPath);
+        if (!isOfflineRetry)
+            AutomaticScanStarted?.Invoke(library.RootPath);
         Exception? error = null;
         try
         {
-            await ScanCoreAsync(library, new AutomaticProgress(this), clearSuppressedPaths, cancellationToken).ConfigureAwait(false);
+            await ScanCoreAsync(library, isOfflineRetry ? null : new AutomaticProgress(this), clearSuppressedPaths, cancellationToken).ConfigureAwait(false);
             if (afterScan is not null)
                 await afterScan().ConfigureAwait(false);
         }
@@ -153,7 +154,7 @@ public sealed class MediaIndexerService(
         }
         finally
         {
-            AutomaticScanFinished?.Invoke(library.RootPath, library.IsOnline, error);
+            AutomaticScanFinished?.Invoke(library.RootPath, library.IsOnline, error, isOfflineRetry);
         }
     }
 

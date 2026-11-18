@@ -1219,13 +1219,17 @@ public partial class MainViewModel(
         }
     }
 
-    public async Task<bool> IsMediaAvailableAsync(MediaFile file, CancellationToken cancellationToken)
+    public async Task<bool> IsMediaAvailableAsync(MediaFile file, CancellationToken cancellationToken, bool reportError = false)
     {
         var exists = await Task.Run(() => File.Exists(file.Path), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         if (!exists)
         {
-            StatusText = string.Format(Localize("MediaUnavailable"), file.FileName);
+            var message = string.Format(Localize("MediaUnavailable"), file.FileName);
+            if (reportError)
+                ReportError(message);
+            else
+                StatusText = message;
             var folder = file.FolderId is { } folderId ? FindFolderNode(FolderTree, folderId) : null;
             if (folder is not null && !await Task.Run(() => Directory.Exists(folder.PathText), cancellationToken))
             {
@@ -1594,7 +1598,7 @@ public partial class MainViewModel(
 
     private string _automaticScanPath = string.Empty;
 
-    private void OnAutomaticScanFinished(string path, bool isOnline, Exception? error) => Dispatcher.UIThread.Post(async () =>
+    private void OnAutomaticScanFinished(string path, bool isOnline, Exception? error, bool isOfflineRetry) => Dispatcher.UIThread.Post(async () =>
     {
         if (_disposed) return;
         try
@@ -1616,8 +1620,11 @@ public partial class MainViewModel(
             }
             _offlineLibraryPaths.Remove(Path.TrimEndingDirectorySeparator(path));
             StartFolderAvailabilityChecks();
-            ScanInfoTitle = Localize("ScanRefreshingTitle");
-            ScanInfoMessage = Localize("ScanRefreshing");
+            if (!isOfflineRetry)
+            {
+                ScanInfoTitle = Localize("ScanRefreshingTitle");
+                ScanInfoMessage = Localize("ScanRefreshing");
+            }
             await RunScanRefreshAsync(() => RefreshTreeAndSelectionAsync(_lifetimeCts.Token), _lifetimeCts.Token);
         }
         catch (OperationCanceledException) when (_lifetimeCts.IsCancellationRequested) { }
@@ -1630,7 +1637,7 @@ public partial class MainViewModel(
         }
         finally
         {
-            if (!_disposed)
+            if (!_disposed && !isOfflineRetry)
             {
                 _activeScanOperations--;
                 IsScanning = _activeScanOperations > 0;

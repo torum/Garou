@@ -565,7 +565,7 @@ public sealed class SyncTests
         var events = new List<string>();
         service.AutomaticScanStarted += path => events.Add($"start:{path}");
         service.AutomaticScanProgress += progress => events.Add(progress.Phase);
-        service.AutomaticScanFinished += (path, online, error) => events.Add($"finish:{path}:{online}:{error is null}");
+        service.AutomaticScanFinished += (path, online, error, _) => events.Add($"finish:{path}:{online}:{error is null}");
 
         try
         {
@@ -651,7 +651,7 @@ public sealed class SyncTests
         var library = new LibraryDefinition { RootPath = root, IsEnabled = true };
         var service = CreateService(new FakeMediaFileRepository(), new NoopWatcher(), library);
         (string Path, bool Online, Exception? Error)? result = null;
-        service.AutomaticScanFinished += (path, online, error) =>
+        service.AutomaticScanFinished += (path, online, error, _) =>
         {
             result = (path, online, error);
             stop.Cancel();
